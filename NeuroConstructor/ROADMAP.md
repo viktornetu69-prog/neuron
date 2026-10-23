@@ -11,7 +11,7 @@
 | Этап | Название | Статус | Прогресс |
 |------|----------|--------|----------|
 | Stage 1 | MVP — Базовое gRPC-соединение | ✅ Завершён | 100% |
-| Stage 2 | Студент-преподаватель архитектура | 🔄 В прогрессе | 40% |
+| Stage 2 | Студент-преподаватель архитектура | 🔄 В прогрессе | 70% |
 | Stage 3 | Обработка датасетов и анализ активации | 📋 Планируется | 0% |
 | Stage 4 | Плагиновая система | ⚠️ Частично | 60% |
 | Stage 5 | Фреймворк тестирования | ⚠️ Частично | 50% |
@@ -51,6 +51,14 @@
 - `NeuroConstructor.Core/core/model_loader.py`
 - `NeuroConstructor.Core/core/model_converter.py`
 - `NeuroConstructor.Core/core/real_quantizer.py`
+
+### 📁 Необходимые файлы моделей (в папке `NeuroConstructor.Core/models/`):
+| Файл | Назначение |
+|------|------------|
+| `teacher.gguf` | Teacher-модель для обучения студента |
+| `student_template.json` | Шаблон студенческой модели (создаётся автоматически при `CreateStudentModel`) |
+
+⚠️ **Важно:** Без `teacher.gguf` Stage 2 не может быть протестирован — методы `LoadTeacherModel`, `CreateStudentModel`, `ConvertModel`, `ValidateModel` требуют исходный файл модели.
 
 ---
 

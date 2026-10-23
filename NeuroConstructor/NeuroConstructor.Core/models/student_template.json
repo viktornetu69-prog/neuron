@@ -1,0 +1,103 @@
+{
+  "model_type": "student",
+  "architecture": {
+    "model_family": "llama",
+    "vocab_size": 32000,
+    "hidden_size": 640,
+    "num_layers": 5,
+    "num_heads": 5,
+    "head_dim": 128,
+    "max_position_embeddings": 2048,
+    "rope_theta": 10000.0,
+    "bos_token_id": 0,
+    "eos_token_id": 1,
+    "pad_token_id": -1
+  },
+  "loading": {
+    "initialized": false,
+    "weights_loaded": false,
+    "compression_applied": false,
+    "teacher_model": "",
+    "loading_parameters": {
+      "max_memory_gb": 2,
+      "use_flash_attention": true,
+      "quantization": "q4_0"
+    }
+  },
+  "parameters": {
+    "total_params": 0,
+    "trainable_params": 0,
+    "tensor_count": 0,
+    "initialized": false,
+    "memory_efficiency": 1.0
+  },
+  "memory": {
+    "used_gb": 0.0,
+    "max_gb": 2.0
+  },
+  "performance": {
+    "inference_latency_ms": 0.0
+  },
+  "compression": {
+    "applied": false,
+    "target_compression_ratio": 0.1,
+    "compression_method": "quantization",
+    "ratio": 0.0,
+    "preserve_weights": true,
+    "specialized_layers": [
+      "attention_query",
+      "attention_key",
+      "attention_value",
+      "feed_forward_up",
+      "feed_forward_down",
+      "attention_output"
+    ]
+  },
+  "metadata": {
+    "created": "",
+    "version": "stage2.0",
+    "purpose": "student_model",
+    "teacher_model_info": {
+      "model_type": "teacher",
+      "path": "",
+      "format": "gguf",
+      "file_size_bytes": 0,
+      "file_size_gb": 0.0,
+      "loaded": false,
+      "architecture": {
+        "model_family": "llama",
+        "vocab_size": 32000,
+        "hidden_size": 2048,
+        "num_layers": 16,
+        "num_heads": 16,
+        "head_dim": 128,
+        "max_position_embeddings": 2048,
+        "rope_theta": 10000.0
+      },
+      "parameters": {
+        "total_params": 0,
+        "trainable_params": 0,
+        "tensor_count": 0,
+        "file_size_gb": 0.0
+      },
+      "loading_time": "",
+      "diagnostics": {
+        "reader": "builtin_header_parser",
+        "gguf_version": 3,
+        "tensor_count": 0,
+        "metadata_keys": 0
+      },
+      "warnings": [],
+      "errors": [],
+      "validation": {
+        "compatible": false,
+        "score": 0.0,
+        "issues": [],
+        "warnings": [],
+        "recommendations": [],
+        "min_similarity_score": 0.85
+      }
+    },
+    "teacher_total_params": 0
+  }
+}
