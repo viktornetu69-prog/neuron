@@ -1,0 +1,134 @@
+<Window x:Class="NeuroConstructor.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="NeuroConstructor: Core UI" Height="700" Width="900">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Chat History Area -->
+        <ListBox x:Name="ChatHistoryBox"
+                 Grid.Row="0" 
+                 Margin="10" 
+                 FontFamily="Consolas"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock TextWrapping="Wrap" Margin="0,2">
+                        <Run Text="{Binding Sender}" FontWeight="Bold"/>
+                        <Run Text=": "/>
+                        <Run Text="{Binding Text}"/>
+                    </TextBlock>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Stage 2 Controls Area -->
+        <GroupBox Grid.Row="1" Margin="10" Padding="10" Header="Model Operations">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="LoadTeacherButton" 
+                        Grid.Row="0" 
+                        Grid.Column="0" 
+                        Content="Load Teacher" 
+                        Height="30" 
+                        Margin="2"
+                        Click="LoadTeacherButton_Click"/>
+                <Button x:Name="CreateStudentButton" 
+                        Grid.Row="0" 
+                        Grid.Column="1" 
+                        Content="Create Student" 
+                        Height="30" 
+                        Margin="2"
+                        Click="CreateStudentButton_Click"/>
+                <Button x:Name="ConvertModelButton" 
+                        Grid.Row="1" 
+                        Grid.Column="0" 
+                        Content="Convert Model" 
+                        Height="30" 
+                        Margin="2"
+                        Click="ConvertModelButton_Click"/>
+                <Button x:Name="ValidateModelButton" 
+                        Grid.Row="1" 
+                        Grid.Column="1" 
+                        Content="Validate Model" 
+                        Height="30" 
+                        Margin="2"
+                        Click="ValidateModelButton_Click"/>
+            
+        <!-- Stage 3: Dataset Processing Controls -->
+        <GroupBox Grid.Row="1" Grid.Column="2" Margin="10,10,10,0" Padding="10" Header="Dataset Operations">
+            <StackPanel>
+                <Button x:Name="ListTemplatesButton"
+                        Content="List Templates"
+                        Height="28" Margin="2"
+                        Click="ListTemplatesButton_Click"/>
+                <Button x:Name="GetTemplateButton"
+                        Content="Get Template"
+                        Height="28" Margin="2"
+                        Click="GetTemplateButton_Click"/>
+                <Button x:Name="CreateDatasetButton"
+                        Content="Create Dataset"
+                        Height="28" Margin="2"
+                        Click="CreateDatasetButton_Click"/>
+                <Button x:Name="AddExampleButton"
+                        Content="Add Example"
+                        Height="28" Margin="2"
+                        Click="AddExampleButton_Click"/>
+                <Button x:Name="ListExamplesButton"
+                        Content="List Examples"
+                        Height="28" Margin="2"
+                        Click="ListExamplesButton_Click"/>
+                <Button x:Name="ValidateDatasetButton"
+                        Content="Validate Dataset"
+                        Height="28" Margin="2"
+                        Click="ValidateDatasetButton_Click"/>
+                <Button x:Name="ExportDatasetButton"
+                        Content="Export Dataset"
+                        Height="28" Margin="2"
+                        Click="ExportDatasetButton_Click"/>
+            </StackPanel>
+        </GroupBox>
+        </Grid>
+
+        </GroupBox>
+
+        <!-- Input Area -->
+        <Grid Grid.Row="2" Margin="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="100"/>
+                <ColumnDefinition Width="100"/>
+            </Grid.ColumnDefinitions>
+            
+            <TextBox x:Name="MessageInput" 
+                     Grid.Column="0" 
+                     Height="30"
+                     VerticalContentAlignment="Center"/>
+            
+            <Button x:Name="SendButton" 
+                    Grid.Column="1" 
+                    Content="Send" 
+                    Height="30"
+                    Margin="2,0,2,0"
+                    Click="SendButton_Click"/>
+            
+            <Button x:Name="ClearButton" 
+                    Grid.Column="2" 
+                    Content="Clear" 
+                    Height="30"
+                    Margin="2,0,0,0"
+                    Click="ClearButton_Click"/>
+        </Grid>
+    </Grid>
+</Window>

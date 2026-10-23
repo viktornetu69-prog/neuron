@@ -1,0 +1,22 @@
+{
+  "model_paths": {
+    "teacher": "models/teacher.gguf",
+    "student_template": "models/student_template.json"
+  },
+  "loading": {
+    "max_memory_gb": 8,
+    "use_flash_attention": true,
+    "quantization": "q4_0",
+    "max_sequence_length": 2048,
+    "device": "cpu"
+  },
+  "validation": {
+    "min_similarity_score": 0.85,
+    "max_activation_diff": 0.1,
+    "require_architectural_match": true
+  },
+  "compression": {
+    "target_compression_ratio": 0.1,
+    "preserve_functionality": true
+  }
+}

@@ -1,0 +1,22 @@
+# Python Dependencies for NeuroConstructor Core
+
+# Communication (required)
+grpcio>=1.51.0
+grpcio-tools>=1.51.0
+protobuf>=4.21.0
+
+# AI & ML
+# NOTE: torch / transformers / gguf are OPTIONAL. The gRPC server starts and all
+# RPCs work without them - only real .pt/.safetensors loading needs torch, and
+# only the gguf package reader needs gguf. Without gguf the core falls back to
+# its built-in GGUF header parser.
+torch>=2.0.0
+transformers>=4.28.0
+accelerate>=0.20.0
+gguf>=0.1.9
+
+# Numerics
+numpy>=1.21.0
+
+# Misc
+python-dotenv>=1.0.0

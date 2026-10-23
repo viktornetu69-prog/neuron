@@ -1,0 +1,254 @@
+syntax = "proto3";
+
+package neuro_constructor;
+
+service NeuroService {
+  // ===== Stage 2: Teacher model loading =====
+  rpc LoadTeacherModel (TeacherModelRequest) returns (TeacherModelResponse);
+  
+  // ===== Stage 2: Teacher-student model management =====
+  rpc CreateStudentModel (CreateStudentRequest) returns (CreateStudentResponse);
+  
+  // ===== Stage 2: Model conversion =====
+  rpc ConvertModel (ConvertRequest) returns (ConvertResponse);
+  
+  // ===== Stage 2: Model validation =====
+  rpc ValidateModel (ValidateRequest) returns (ValidateResponse);
+  
+  // ===== MVP: Chat =====
+  rpc Chat (ChatRequest) returns (ChatResponse);
+  
+  // ===== MVP: Status =====
+  rpc GetStatus (StatusRequest) returns (StatusResponse);
+  
+  // ===== Stage 6: Advanced Functions - AI, Forecast, AutoFix, SelfLearning =====
+  rpc Stage6AI (Stage6AIRequest) returns (Stage6AIResponse);
+  rpc Stage6Forecast (Stage6ForecastRequest) returns (Stage6ForecastResponse);
+  rpc Stage6AutoFix (Stage6AutoFixRequest) returns (Stage6AutoFixResponse);
+  rpc Stage6SelfLearn (Stage6SelfLearnRequest) returns (Stage6SelfLearnResponse);
+  rpc Stage6FullCycle (Stage6FullCycleRequest) returns (Stage6FullCycleResponse);
+}
+
+// ==================== Stage 6: Advanced Functions ====================
+
+message Stage6AIRequest {
+  map<string, float> metrics = 1;
+}
+
+message Stage6AIResponse {
+  float predicted_performance = 1;
+  string status = 2;
+  repeated string recommendations = 3;
+  string ml_version = 4;
+}
+
+message Stage6ForecastRequest {
+  int32 forecast_horizon = 1;
+}
+
+message Stage6ForecastResponse {
+  repeated float predicted_loads = 1;
+  string status = 2;
+  string forecast_timestamp = 3;
+}
+
+message Stage6AutoFixRequest {
+  string error_type = 1;
+  string error_data = 2;
+}
+
+message Stage6AutoFixResponse {
+  string status = 1;
+  repeated string fixes_applied = 2;
+  string timestamp = 3;
+}
+
+message Stage6SelfLearnRequest {
+  repeated Example results = 1;
+}
+
+message Stage6SelfLearnResponse {
+  bool success = 1;
+  string timestamp = 2;
+  SelfLearningStats stats = 3;
+}
+
+message SelfLearningStats {
+  bool is_trained = 1;
+  float learning_rate = 2;
+  float min_confidence = 3;
+  string performance = 4;
+  string optimization_level = 5;
+}
+
+message Stage6FullCycleRequest {
+  map<string, float> metrics = 1;
+}
+
+message Stage6FullCycleResponse {
+  bool success = 1;
+  string timestamp = 2;
+  Stage6AIResponse ai = 3;
+  Stage6ForecastResponse forecast = 4;
+  Stage6AutoFixResponse auto_fix = 5;
+  Stage6SelfLearnResponse self_learning = 6;
+}
+
+message ChatRequest {
+  string message = 1;
+  repeated Message history = 2; // Outgoing messages
+}
+
+message Message {
+  string role = 1; // "user", "assistant", "system"
+  string content = 2;
+}
+
+message ChatResponse {
+  string message = 1;
+  bool is_error = 2;
+  string error_detail = 3;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  bool model_loaded = 1;
+  string model_path = 2;
+  int32 gpu_layers = 3;
+}
+
+// ===== Stage 2: Teacher-student model management =====
+
+message TeacherModelRequest {
+  string model_path = 1;
+}
+
+message TeacherModelResponse {
+  string status = 1;
+  string model_info = 2;
+  float quality_score = 3;
+  string error_message = 4;
+}
+
+message CreateStudentRequest {
+  string teacher_model_path = 1;
+}
+
+message CreateStudentResponse {
+  string status = 1;
+  string student_model_info = 2;
+  bool compression_applied = 3;
+  string error_message = 4;
+}
+
+message ConvertRequest {
+  string teacher_path = 1;
+  string student_path = 2;
+}
+
+message ConvertResponse {
+  string status = 1;
+  string conversion_results = 2;
+  float compression_ratio = 3;
+  float quality_score = 4;
+  string error_message = 5;
+}
+
+message ValidateRequest {
+  string teacher_model = 1;
+  string student_model = 2;
+}
+
+message ValidateResponse {
+  bool is_valid = 1;
+  string validation_results = 2;
+  float quality_score = 3;
+  float compatibility_score = 4;
+  string error_message = 5;
+}
+
+// ==================== Stage 3: Dataset Processing ====================
+
+service DatasetService {
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc GetTemplate(GetTemplateRequest) returns (Template);
+  rpc CreateDataset(CreateDatasetRequest) returns (CreateDatasetResponse);
+  rpc ListExamples(ListExamplesRequest) returns (ListExamplesResponse);
+  rpc AddExample(AddExampleRequest) returns (Example);
+  rpc ValidateDataset(ValidateDatasetRequest) returns (ValidateDatasetResponse);
+  rpc ExportDataset(ExportDatasetRequest) returns (ExportDatasetResponse);
+}
+
+message ListTemplatesRequest {}
+
+message ListTemplatesResponse {
+  repeated Template templates = 1;
+}
+
+message GetTemplateRequest {
+  string name = 1;
+}
+
+message Template {
+  string name = 1;
+  string kind = 2;
+  repeated string categories = 3;
+  int32 count = 4;
+  string description = 5;
+}
+
+message CreateDatasetRequest {
+  string template_name = 1;
+  int32 count = 2;
+  map<string,string> params = 3;
+}
+
+message CreateDatasetResponse {
+  string dataset_id = 1;
+  string manifest_path = 2;
+}
+
+message ListExamplesRequest {
+  string dataset_id = 1;
+  int32 offset = 2;
+  int32 limit = 3;
+}
+
+message ListExamplesResponse {
+  repeated Example examples = 1;
+  int32 total = 2;
+}
+
+message Example {
+  string id = 1;
+  string prompt = 2;
+  string expected = 3;
+  string kind = 4;
+  map<string,string> metadata = 5;
+}
+
+message AddExampleRequest {
+  string dataset_id = 1;
+  string prompt = 2;
+  string expected = 3;
+}
+
+message ValidateDatasetRequest {
+  string dataset_id = 1;
+}
+
+message ValidateDatasetResponse {
+  bool valid = 1;
+  repeated string errors = 2;
+}
+
+message ExportDatasetRequest {
+  string dataset_id = 1;
+  string path = 2;
+}
+
+message ExportDatasetResponse {
+  string export_path = 1;
+  int32 exported_count = 2;
+}

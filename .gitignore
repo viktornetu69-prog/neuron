@@ -1,0 +1,54 @@
+# C# / .NET ignored
+bin/
+obj/
+Debug/
+Release/
+*.user
+*.suo
+*.sdf
+*.opensaj
+*.nuget.props
+*.nuget.cache
+project.assets.json
+**/obj/
+**/bin/
+
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.tmp
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Test artifacts
+**/_artifacts/
+**/*.bak
+**/*.backup
+
+# Generated protobuf files
+**/*_pb2.py
+**/*_pb2_grpc.py
+
+# Build outputs
+dist/
+build/
+*.nupkg
+*.snupkg
+
+# OS
+Thumbs.db
+.DS_Store
