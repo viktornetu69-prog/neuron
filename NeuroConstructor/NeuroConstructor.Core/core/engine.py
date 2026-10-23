@@ -1,7 +1,7 @@
 import os
 import time
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 
 import NeuroConstructor_pb2 as pb
@@ -20,8 +20,11 @@ MODELS_DIR = os.path.join(BASE_DIR, "models")
 STUDENT_TEMPLATE_PATH = os.path.join(MODELS_DIR, "student_template.json")
 CONVERTED_MODEL_PATH = os.path.join(MODELS_DIR, "student_converted.gguf")
 
-# Stage 3: Dataset storage
-DATASETS_DIR = os.path.join(BASE_DIR, "datasets")
+# Stage 3: Dataset processing and activation analysis
+from core.dataset_processor import DatasetProcessor, ActivationAnalyzer, ActivationVisualizer
+
+# Stage 4 Imports
+from core.model_inference import ModelInference, PredictionResult
 
 # Stage 6: Unified plugin for AI, Forecast, AutoFix, SelfLearning
 STAGE6_PLUGIN = Stage6UnifiedPlugin({})
@@ -41,6 +44,15 @@ class NeuroServiceImplementation(pb_grpc.NeuroServiceServicer):
         self.teacher_model_info = None
         self.student_model_info = None
         self.conversion_results = None
+        
+        # Stage 3: Dataset management state
+        self.dataset_processor = DatasetProcessor()
+        self.processed_datasets: Dict[str, Any] = {}
+
+        # Stage 4: Model inference state
+        self.inference_engine = ModelInference()
+        self.prediction_history: List[PredictionResult] = []
+        self.current_prediction: Optional[PredictionResult] = None
 
     def Chat(self, request, context):
         """
@@ -65,6 +77,58 @@ class NeuroServiceImplementation(pb_grpc.NeuroServiceServicer):
             model_loaded=self.model_loaded,
             model_path=self.model_path,
             gpu_layers=0
+        )
+
+    def Predict(self, request, context):
+        """Stage 4: Make prediction using student model.
+        
+        Args:
+            request: PredictRequest with input features and scenario
+            context: gRPC context
+            
+        Returns:
+            PredictResponse with prediction result
+        """
+        scenario = request.scenario or "performance"
+        input_features = dict(request.features) if request.features else {}
+        
+        # Run prediction using the inference engine
+        try:
+            result: PredictionResult = self.inference_engine.predict(input_features)
+            self.current_prediction = result
+            self.prediction_history.append(result)
+            
+            # Keep history manageable
+            if len(self.prediction_history) > 100:
+                self.prediction_history = self.prediction_history[-100:]
+            
+            return pb.PredictResponse(
+                prediction=result.prediction,
+                confidence=result.confidence,
+                scenario=scenario,
+                note="Prediction completed using student model"
+            )
+        except Exception as e:
+            return pb.PredictResponse(
+                prediction="error",
+                confidence=0.0,
+                scenario=scenario,
+                note=f"Prediction error: {str(e)}"
+            )
+
+    def GetPredictionHistory(self, request, context):
+        """Stage 4: Get prediction history.
+        
+        Args:
+            request: Empty request
+            context: gRPC context
+            
+        Returns:
+            PredictHistoryResponse with prediction history
+        """
+        return pb.PredictHistoryResponse(
+            predictions=self.prediction_history,
+            total_count=self.prediction_count
         )
     
     # ===== Stage 2: Teacher-Student Model Management =====
@@ -99,33 +163,14 @@ class NeuroServiceImplementation(pb_grpc.NeuroServiceServicer):
 
     def CreateDataset(self, request, context):
         dataset_id = str(uuid.uuid4())[:8]
+        result = self.dataset_processor.process_dataset(
+            dataset_id,
+            {"template_name": request.template_name, "count": request.count}
+        )
         dataset_dir = os.path.join(DATASETS_DIR, dataset_id)
         os.makedirs(dataset_dir, exist_ok=True)
-        manifest = {
-            "dataset_id": dataset_id,
-            "template_name": request.template_name,
-            "kind": "text",
-            "categories": [],
-            "count": request.count,
-            "params": dict(request.params) if request.params else {},
-            "created_at": datetime.now().isoformat(),
-            "status": "ready"
-        }
-        manifest_path = os.path.join(dataset_dir, "manifest.json")
-        with open(manifest_path, 'w') as f:
-            json.dump(manifest, f, indent=2)
-        for i in range(max(0, request.count)):
-            ex = {
-                "id": dataset_id + "_ex_" + str(i).zfill(4),
-                "prompt": "Prompt " + str(i+1) + " for " + request.template_name,
-                "expected": "Expected " + str(i+1),
-                "kind": "text",
-                "metadata": dict(request.params) if request.params else {}
-            }
-            ex_path = os.path.join(dataset_dir, "example_" + str(i).zfill(4) + ".json")
-            with open(ex_path, 'w') as f:
-                json.dump(ex, f, indent=2)
-        return pb.CreateDatasetResponse(dataset_id=dataset_id, manifest_path=manifest_path)
+        self.processed_datasets[dataset_id] = result
+        return pb.CreateDatasetResponse(dataset_id=dataset_id, manifest_path=os.path.join(dataset_dir, "manifest.json"))
 
     def AddExample(self, request, context):
         dataset_dir = os.path.join(DATASETS_DIR, request.dataset_id)
@@ -133,7 +178,21 @@ class NeuroServiceImplementation(pb_grpc.NeuroServiceServicer):
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("Dataset not found")
             return pb.Example()
-        files = [f for f in os.listdir(dataset_dir) if f.startswith('example_') and f.endswith('.json')]
+        # Add example using dataset processor
+        result = self.dataset_processor.process_dataset(dataset_dir, None)
+        # Create the example file
+        example_id = request.dataset_id + "_ex_" + str(len(result.get("examples", []))).zfill(4)
+        ex = {
+            "id": example_id,
+            "prompt": request.prompt or "New example",
+            "expected": request.expected or "Expected output",
+            "kind": request.kind or "text",
+            "metadata": dict(request.params) if request.params else {}
+        }
+        ex_path = os.path.join(dataset_dir, "example_" + str(len([f for f in os.listdir(dataset_dir) if f.startswith('example_') and f.endswith('.json')])).zfill(4) + ".json")
+        with open(ex_path, 'w') as f:
+            json.dump(ex, f, indent=2)
+        return pb.Example(id=example_id, prompt=ex["prompt"], expected=ex["expected"], kind=ex["kind"], metadata=ex.get("metadata", {}))
         next_idx = len(files)
         ex = {
             "id": request.dataset_id + "_ex_" + str(next_idx).zfill(4),
@@ -565,3 +624,183 @@ class NeuroServiceImplementation(pb_grpc.NeuroServiceServicer):
             auto_fix=auto_fix_response,
             self_learning=self_learn_response,
         )
+
+    def AnalyzeActivations(self, request, context):
+        """Stage 3: Analyze neuron activations for a dataset.
+        
+        Args:
+            request: AnalyzeActivationsRequest with dataset_id and model_path
+            context: gRPC context
+            
+        Returns:
+            AnalyzeActivationsResponse with activation statistics
+        """
+        dataset_id = request.dataset_id
+        model_path = request.model_path
+        
+        if dataset_id not in self.processed_datasets:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details("Dataset not found")
+            return pb.AnalyzeActivationsResponse(
+                success=False,
+                dataset_id=dataset_id,
+                activation_statistics={},
+                note="Dataset not processed yet"
+            )
+        
+        if not model_path:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details("Model path is required for activation analysis")
+            return pb.AnalyzeActivationsResponse(
+                success=False,
+                dataset_id=dataset_id,
+                activation_statistics={},
+                note="Model path is required for activation analysis"
+            )
+        
+        # Get dataset info
+        dataset_info = self.processed_datasets[dataset_id]
+        
+        # Perform activation analysis using the analyzer
+        try:
+            analyzer = ActivationAnalyzer()
+            stats = analyzer.analyze_dataset_activations(dataset_id, model_path)
+            
+            # Format statistics for display
+            formatted = ActivationVisualizer.format_activation_stats(stats)
+            
+            return pb.AnalyzeActivationsResponse(
+                success=True,
+                dataset_id=dataset_id,
+                activation_statistics=stats,
+                formatted_stats=formatted,
+                note="Activation analysis completed"
+            )
+        except Exception as e:
+            return pb.AnalyzeActivationsResponse(
+                success=False,
+                dataset_id=dataset_id,
+                activation_statistics={},
+                note=f"Activation analysis error: {str(e)}"
+            )
+# ===== Stage 4: Model inference and game predictions =====
+
+    def Predict(self, request, context):
+        """Stage 4: Make predictions using the student model for game scenarios.
+
+        Args:
+            request: PredictRequest with game scenario parameters
+            context: gRPC context
+
+        Returns:
+            PredictResponse with prediction results
+        """
+        try:
+            # Use the inference engine to make a prediction
+            scenario = request.scenario or "default"
+            features = request.features or {}
+
+            # Get the student model if available, otherwise use default
+            if self.student_model_info is not None:
+                result = self.inference_engine.predict(
+                    model_info=self.student_model_info,
+                    scenario=scenario,
+                    features=features
+                )
+            else:
+                result = self.inference_engine.predict(
+                    scenario=scenario,
+                    features=features
+                )
+
+            # Update state
+            self.current_prediction = result
+            self.prediction_history.append(result)
+
+            return pb.PredictResponse(
+                success=True,
+                prediction=result.prediction,
+                confidence=float(result.confidence),
+                game_scenario=result.game_scenario,
+                timestamp=str(time.time())
+            )
+        except Exception as e:
+            return pb.PredictResponse(
+                success=False,
+                prediction="",
+                confidence=0.0,
+                game_scenario=scenario,
+                note=f"Prediction error: {str(e)}",
+                timestamp=str(time.time())
+            )
+
+    def GetPredictionStatus(self, request, context):
+        """Stage 4: Get the current prediction status.
+
+        Args:
+            request: Empty request
+            context: gRPC context
+
+        Returns:
+            PredictionStatusResponse with current prediction state
+        """
+        return pb.PredictionStatusResponse(
+            has_current_prediction=self.current_prediction is not None,
+            prediction_count=len(self.prediction_history),
+            model_loaded=self.model_loaded,
+            timestamp=str(time.time())
+        )
+def quick_predict(scenario: str = "default", features: Dict[str, float] = None) -> Dict[str, Any]:
+    """Convenience function for quick predictions without gRPC calls.
+    
+    Args:
+        scenario: Game scenario name/identifier
+        features: Dictionary of features/metrics for the prediction
+        
+    Returns:
+        Dictionary with prediction results
+    """
+    if features is None:
+        features = {}
+    
+    try:
+        result = engine.inference_engine.predict(
+            model_info=engine.student_model_info,
+            scenario=scenario,
+            features=features
+        )
+        engine.prediction_history.append(result)
+        engine.current_prediction = result
+        
+        return {
+            "prediction": result.prediction,
+            "confidence": float(result.confidence),
+            "game_scenario": result.game_scenario,
+            "success": True
+        }
+    except Exception as e:
+        return {
+            "prediction": "",
+            "confidence": 0.0,
+            "game_scenario": scenario,
+            "success": False,
+            "error": str(e)
+        }
+
+
+def quick_status() -> Dict[str, Any]:
+    """Convenience function to get current prediction status.
+    
+    Returns:
+        Dictionary with current prediction state
+    """
+    return {
+        "has_current_prediction": engine.current_prediction is not None,
+        "prediction_count": len(engine.prediction_history),
+        "model_loaded": engine.model_loaded,
+        "timestamp": time.time()
+    }
+
+
+# Module-level engine singleton
+engine = NeuroServiceImplementation()
