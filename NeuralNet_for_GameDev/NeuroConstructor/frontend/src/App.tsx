@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppLayout } from './components/AppLayout';
 import { ChatArea } from './components/ChatArea';
+import { ModelsPanel } from './components/ModelsPanel';
 import { StatusBar } from './components/StatusBar';
 import { PluginManagerPanel } from './components/PluginManager';
 import { PreviewPanel } from './components/PreviewPanel';
@@ -166,6 +167,8 @@ export default function App() {
               isLoading={state.loading}
               isServerAvailable={state.isServerAvailable}
             />
+          ) : state.panel === 'models' ? (
+            <ModelsPanel isServerAvailable={state.isServerAvailable} />
           ) : state.panel === 'plugins' ? (
             <PluginManagerPanel />
           ) : (

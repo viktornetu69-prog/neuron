@@ -1,26 +1,46 @@
 @echo off
-:: NeuroConstructor - Запуск всех компонентов без окон консоли
+:: NeuroConstructor - Полная перезагрузка и запуск
 
 setlocal
 
-:: Создаем временный VBS скрипт для скрытия окон
-set "VBS=%temp%\NeuroHidden.vbs"
+echo ========================================
+echo  NeuroConstructor - Остановка процессов
+echo ========================================
 
-> "%VBS%" echo Set WshShell = CreateObject("WScript.Shell")
->> "%VBS%" echo WScript.Sleep 1000
->> "%VBS%" echo ' 1. Запуск Python Backend (скрыто)
->> "%VBS%" echo WshShell.Run """python"" ""%~dp0backend\main.py""", 0, False
->> "%VBS%" echo WScript.Sleep 3000
->> "%VBS%" echo ' 2. Запуск React Frontend (скрыто)
->> "%VBS%" echo WshShell.Run """cmd"" /c cd /d ""%~dp0frontend"" && npm run dev", 0, False
->> "%VBS%" echo WScript.Sleep 3000
->> "%VBS%" echo ' 3. Запуск Electron UI (отображается)
->> "%VBS%" echo WshShell.Run """%~dp0node_modules\electron\dist\electron.exe"" ""%~dp0electron\main.js""", 1, False
->> "%VBS%" echo WScript.Sleep 1000
->> "%VBS%" echo Set WshShell = Nothing
+echo [*] Остановка Python...
+taskkill /F /IM python.exe >nul 2>&1
 
-:: Запускаем VBS скрипт
-cscript //nologo "%VBS%"
+echo [*] Остановка Node...
+taskkill /F /IM node.exe >nul 2>&1
 
-:: Удаляем временный файл
-del "%VBS%" >nul 2>&1
+echo [*] Ожидание освобождения портов...
+timeout /t 2 /nobreak >nul
+
+echo.
+echo ========================================
+echo  NeuroConstructor - Запуск
+echo ========================================
+
+echo [*] Запуск Backend (скрыто)...
+start "" /MIN cmd /c "cd /d "%~dp0backend" && python main.py"
+
+echo [*] Запуск Frontend (скрыто)...
+timeout /t 2 /nobreak >nul
+start "" /MIN cmd /c "cd /d "%~dp0frontend" && npm run dev"
+
+echo [*] Ожидание инициализации серверов...
+timeout /t 8 /nobreak >nul
+
+echo [*] Запуск Electron...
+if exist "%~dp0node_modules\electron\dist\electron.exe" (
+    start "" "%~dp0node_modules\electron\dist\electron.exe" "%~dp0electron\main.js"
+) else (
+    echo [!] Electron не найден по пути: %~dp0node_modules\electron\dist\electron.exe
+)
+
+echo.
+echo ========================================
+echo  NeuroConstructor запущен!
+echo  Backend:  http://localhost:8000
+echo  Frontend: http://localhost:3000
+echo ========================================

@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "NeuroConstructor.Core", "core"))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -121,6 +121,16 @@ class Stage6FullCycleResponse(BaseModel):
     forecast: Optional[Stage6ForecastResponse] = None
     auto_fix: Optional[Stage6AutoFixResponse] = None
     self_learning: Optional[Stage6SelfLearnResponse] = None
+
+class ModelFileInfo(BaseModel):
+    filename: str
+    path: str
+    size: int
+    modified: str
+
+class ModelListResponse(BaseModel):
+    status: str
+    files: List[ModelFileInfo] = []
 
 server_state = {
     "engine": None,
@@ -327,6 +337,75 @@ async def create_dataset(template_name: str = "default", count: int = 10):
     except Exception as e:
         logger.error(f"Create dataset error: {e}")
         return {"error": str(e)}
+
+# ============================================
+# Model file management endpoints
+# ============================================
+
+@app.get("/api/models/list")
+async def list_model_files(directory: str = "teacher"):
+    """Получить список файлов в директории моделей"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].list_model_files(directory)
+        return result
+    except Exception as e:
+        logger.error(f"List models error: {e}")
+        return {"status": "error", "files": []}
+
+@app.post("/api/models/upload")
+async def upload_model(file: UploadFile = File(...), directory: str = "teacher"):
+    """Загрузка модели в директорию"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        file_data = await file.read()
+        result = server_state["engine"].upload_model(
+            file_data=file_data,
+            filename=file.filename,
+            directory=directory,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return {"status": "error", "error_message": str(e)}
+
+@app.get("/api/models/teacher")
+async def get_teacher_models():
+    """Получить список Teacher моделей"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].list_model_files("teacher")
+        return {"models": result.get("files", [])}
+    except Exception as e:
+        logger.error(f"Get teacher models error: {e}")
+        return {"models": []}
+
+@app.get("/api/models/student")
+async def get_student_models():
+    """Получить список Student моделей"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].list_model_files("student")
+        return {"models": result.get("files", [])}
+    except Exception as e:
+        logger.error(f"Get student models error: {e}")
+        return {"models": []}
+
+@app.get("/api/models/teacher/{filename}")
+async def analyze_teacher_model(filename: str):
+    """Анализ архитектуры Teacher модели"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].analyze_teacher_model(filename)
+        return result
+    except Exception as e:
+        logger.error(f"Analyze teacher error: {e}")
+        return {"status": "error", "error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
