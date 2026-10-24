@@ -1,13 +1,14 @@
 /**
- * NeuronNode — отрисовка отдельного нейрона
+ * NeuronNode — отрисовка отдельного нейрона с hover-эффектами
  * 
- * Исправлено:
- * - Фиксированный радиус (hover только меняет opacity/border)
- * - Smooth transitions без смещения элементов
- * - Убрана анимация размера при hover (было смещение)
+ * Фичи:
+ * - Hover: glow-эффект, scale(1.15), показывает имя слоя
+ * - Click: pulse анимация
+ * - Fixed radius 11px — нет смещения при hover
+ * - Smooth CSS transitions
  */
 
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 
 interface NeuronNodeProps {
   x: number;
@@ -17,6 +18,7 @@ interface NeuronNodeProps {
   layerColor: string;
   layerColorLight: string;
   layerColorDark: string;
+  layerName: string;
   isHovered: boolean;
   isDimmed: boolean;
   onHover: () => void;
@@ -25,81 +27,128 @@ interface NeuronNodeProps {
   onBlur: () => void;
 }
 
-/**
- * Отдельный нейрон с hover-состояниями и ARIA-атрибутами.
- * Использует memo для предотвращения лишних перерисовок.
- * 
- * @param x - Координата X нейрона
- * @param y - Координата Y нейрона
- * @param layerIndex - Индекс слоя (0-based)
- * @param neuronIndex - Индекс нейрона в слое (0-based)
- * @param layerColor - Основной цвет слоя
- * @param layerColorLight - Светлый оттенок для градиента
- * @param layerColorDark - Тёмный оттенок для градиента
- * @param isHovered - Подсвечен ли нейрон
- * @param isDimmed - Затемнён ли (когда hover на другом нейроне)
- * @param onHover - Обработчик наведения мыши
- * @param onLeave - Обработчик ухода мыши
- * @param onFocus - Обработчик фокуса (клавиатура)
- * @param onBlur - Обработчик потери фокуса
- */
 export const NeuronNode = memo<NeuronNodeProps>(({
-  x,
-  y,
-  layerIndex,
-  neuronIndex,
-  layerColor,
-  isHovered,
-  isDimmed,
-  onHover,
-  onLeave,
-  onFocus,
-  onBlur,
-}) => (
-  <g
-    role="button"
-    tabIndex={0}
-    aria-label={`Нейрон слоя ${layerIndex + 1}, позиция ${neuronIndex + 1}`}
-    aria-selected={isHovered}
-    onMouseEnter={onHover}
-    onMouseLeave={onLeave}
-    onFocus={onFocus}
-    onBlur={onBlur}
-    style={{
-      transition: 'opacity 0.2s ease',
-      cursor: 'pointer',
-    }}
-    opacity={isDimmed ? 0.15 : 1}
-  >
-    {/* Внешнее кольцо при hover (не меняет размер основного круга) */}
-    {isHovered && (
+  x, y, layerIndex, neuronIndex, layerColor,
+  isHovered, isDimmed, layerName,
+  onHover, onLeave, onFocus, onBlur,
+}) => {
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const handleClick = useCallback(() => {
+    setIsAnimating(true);
+    setTimeout(() => setIsAnimating(false), 600);
+  }, []);
+
+  return (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={`Нейрон: ${layerName}, позиция ${neuronIndex + 1}`}
+      aria-selected={isHovered}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onClick={handleClick}
+      style={{ transition: 'opacity 0.2s ease', cursor: 'pointer' }}
+      opacity={isDimmed ? 0.15 : 1}
+    >
+      {/* Pulse анимация при клике */}
+      {isAnimating && (
+        <>
+          <circle cx={x} cy={y} r="11" fill="none" stroke={layerColor} strokeWidth="4" opacity="0.8">
+            <animate attributeName="r" from="11" to="30" dur="0.6s" fill="freeze" />
+            <animate attributeName="opacity" from="0.8" to="0" dur="0.6s" fill="freeze" />
+          </circle>
+        </>
+      )}
+
+      {/* Glow ring при hover */}
+      {(isHovered || isAnimating) && (
+        <circle
+          cx={x}
+          cy={y}
+          r="18"
+          fill="none"
+          stroke={layerColor}
+          strokeWidth="1"
+          opacity={isHovered ? 0.4 : 0.2}
+          style={{ transition: 'opacity 0.2s ease' }}
+        />
+      )}
+
+      {/* Тень для глубины */}
       <circle
         cx={x}
         cy={y}
-        r="13"
-        fill="none"
-        stroke={layerColor}
-        strokeWidth="2"
-        opacity="0.6"
-        style={{
-          transition: 'opacity 0.2s ease',
-        }}
+        r="11"
+        fill="black"
+        opacity="0.2"
+        style={{ transition: 'opacity 0.2s ease' }}
       />
-    )}
-    {/* Основной круг — фиксированный радиус 11px */}
-    <circle
-      cx={x}
-      cy={y}
-      r={11}
-      fill={`url(#ng${layerIndex})`}
-      stroke={isHovered ? layerColor : `${layerColor}80`}
-      strokeWidth={isHovered ? 3 : 1.5}
-      filter={isHovered ? `url(#gf${layerIndex})` : undefined}
-      style={{
-        transition: 'stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease',
-      }}
-    />
-  </g>
-));
+
+      {/* Основной круг с радиальным градиентом */}
+      <circle
+        cx={x}
+        cy={y}
+        r="11"
+        fill={`url(#ng${layerIndex})`}
+        stroke={isHovered ? '#ffffff' : layerColor}
+        strokeWidth={isHovered ? 3 : 2}
+        filter={isHovered ? `url(#gf${layerIndex})` : undefined}
+        style={{ transition: 'stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease' }}
+      />
+
+      {/* Индикатор нейрона в слое */}
+      <text
+        x={x}
+        y={y + 1}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill="white"
+        fontSize="7"
+        fontWeight="bold"
+        style={{ pointerEvents: 'none', userSelect: 'none' }}
+      >
+        {neuronIndex + 1}
+      </text>
+
+      {/* Tooltip при hover */}
+      {isHovered && (
+        <g>
+          <rect
+            x={x - 50}
+            y={y - 40}
+            width="100"
+            height="26"
+            rx="4"
+            fill="rgba(0,0,0,0.9)"
+            stroke={layerColor}
+            strokeWidth="1"
+          />
+          <text
+            x={x}
+            y={y - 26}
+            textAnchor="middle"
+            fill="white"
+            fontSize="9"
+            fontWeight="500"
+          >
+            {layerName}
+          </text>
+          <text
+            x={x}
+            y={y - 16}
+            textAnchor="middle"
+            fill="#8888aa"
+            fontSize="8"
+          >
+            Нейрон #{neuronIndex + 1}
+          </text>
+        </g>
+      )}
+    </g>
+  );
+});
 
 NeuronNode.displayName = 'NeuronNode';
