@@ -1,0 +1,29 @@
+# Large model files - do not commit
+*.gguf
+
+# SSH keys
+github_ed25519
+github_ed25519.pub
+github_deploy_key
+github_deploy_key.pub
+
+# Python scripts
+fix_xaml.py
+generate_deploy_key.py
+generate_key.py
+restore_xaml.py
+test.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+temp/
+%LOCALAPPDATA%/
+
+# Analysis docs (large)
+NeuralNet_for_GameDev_Analysis/
+
+# Gigacode
+.gigacode/
