@@ -45,11 +45,17 @@ export const NeuronNode = memo<NeuronNodeProps>(({
       tabIndex={0}
       aria-label={`Нейрон: ${layerName}, позиция ${neuronIndex + 1}`}
       aria-selected={isHovered}
-      onMouseEnter={onHover}
+      onMouseEnter={(e) => {
+        e.stopPropagation();
+        onHover();
+      }}
       onMouseLeave={onLeave}
       onFocus={onFocus}
       onBlur={onBlur}
-      onClick={handleClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleClick();
+      }}
       style={{ transition: 'opacity 0.2s ease', cursor: 'pointer' }}
       opacity={isDimmed ? 0.15 : 1}
     >
@@ -117,33 +123,34 @@ export const NeuronNode = memo<NeuronNodeProps>(({
       {isHovered && (
         <g>
           <rect
-            x={x - 50}
-            y={y - 40}
-            width="100"
-            height="26"
-            rx="4"
-            fill="rgba(0,0,0,0.9)"
+            x={x - 80}
+            y={y - 52}
+            width="160"
+            height="44"
+            rx="6"
+            fill="rgba(0,0,0,0.92)"
             stroke={layerColor}
-            strokeWidth="1"
+            strokeWidth="1.5"
+            style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }}
           />
           <text
             x={x}
-            y={y - 26}
+            y={y - 36}
             textAnchor="middle"
             fill="white"
-            fontSize="9"
-            fontWeight="500"
+            fontSize="11"
+            fontWeight="600"
           >
             {layerName}
           </text>
           <text
             x={x}
-            y={y - 16}
+            y={y - 18}
             textAnchor="middle"
             fill="#8888aa"
-            fontSize="8"
+            fontSize="9"
           >
-            Нейрон #{neuronIndex + 1}
+            Позиция: #{neuronIndex + 1}
           </text>
         </g>
       )}

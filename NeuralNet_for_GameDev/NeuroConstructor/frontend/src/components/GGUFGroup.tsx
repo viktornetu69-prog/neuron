@@ -30,22 +30,31 @@ interface GGUFGroupProps {
 
 /**
  * Визуализация матрицы весов (для embedding/output слоёв)
+ *
+ * Исправлено: убран Math.random() — теперь opacity детерминированный,
+ * зависит от позиции в матрице. Это убирает мерцание и случайное выделение.
  */
 const WeightMatrix: React.FC<{ color: string; size?: number }> = memo(({ color, size = 40 }) => (
   <g>
     {[...Array(5)].map((_, row) =>
-      [...Array(5)].map((_, col) => (
-        <rect
-          key={`m${row}_${col}`}
-          x={-size / 2 + col * (size / 5)}
-          y={-size / 2 + row * (size / 5)}
-          width={size / 5 - 1}
-          height={size / 5 - 1}
-          fill={color}
-          opacity={0.3 + Math.random() * 0.4}
-          rx="1"
-        />
-      ))
+      [...Array(5)].map((_, col) => {
+        // Детерминированное значение opacity на основе позиции
+        // Диапазон: 0.3 — 0.7, паттерн "тепловой карты"
+        const baseValue = (row + col) / (4 + 4); // 0.0 — 1.0
+        const opacity = 0.3 + baseValue * 0.4;
+        return (
+          <rect
+            key={`m${row}_${col}`}
+            x={-size / 2 + col * (size / 5)}
+            y={-size / 2 + row * (size / 5)}
+            width={size / 5 - 1}
+            height={size / 5 - 1}
+            fill={color}
+            opacity={opacity}
+            rx="1"
+          />
+        );
+      })
     )}
     <rect
       x={-size / 2}
