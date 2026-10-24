@@ -14,7 +14,7 @@
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { NeuronNode } from './NeuronNode';
-import { Connections, type ConnectionWeight } from './Connections';
+import { Connections } from './Connections';
 import { LayerNavigation } from './LayerNavigation';
 import GGUFGroup from './GGUFGroup';
 import GGUFInfoBar from './GGUFInfoBar';
@@ -166,7 +166,6 @@ export function NeuralNetVisualizer({
   const [activeFilter, setActiveFilter] = useState<'all'>('all');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
-  const [hoveredConnection, setHoveredConnection] = useState<ConnectionWeight | null>(null);
   const [compareArch] = useState<ArchitectureParams | null>(null);
 
   const arch: ArchitectureParams = useMemo(() => validateArchitecture(architecture), [architecture]);
@@ -379,10 +378,6 @@ export function NeuralNetVisualizer({
   }, []);
 
   const handleNeuronLeave = useCallback(() => setHoveredNeuron(null), []);
-
-  const handleConnectionHover = useCallback((conn: ConnectionWeight | null) => {
-    setHoveredConnection(conn);
-  }, []);
 
   // Клавиатурная навигация
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -647,14 +642,16 @@ export function NeuralNetVisualizer({
             layers={filteredLayers.map(l => ({ color: l.color, colorLight: l.colorLight, colorDark: l.colorDark }))}
             positions={layout.positions}
             hoveredNeuron={hoveredNeuron}
-            onConnectionHover={handleConnectionHover}
           />
 
           {/* Neurons */}
           {layout.positions.map((neuron) => {
             const layer = filteredLayers[neuron.layerIndex];
             const isHovered = !!hoveredNeuron && hoveredNeuron.layerIndex === neuron.layerIndex && hoveredNeuron.neuronIndex === neuron.neuronIndex;
-            const isDimmed = hoveredNeuron !== null && hoveredNeuron.layerIndex !== neuron.layerIndex;
+            // Затемняем все нейроны, КРОМЕ hovered — проверям по слою И индексу
+            const isDimmed = hoveredNeuron !== null && 
+              (hoveredNeuron.layerIndex !== neuron.layerIndex || 
+               hoveredNeuron.neuronIndex !== neuron.neuronIndex);
             return (
               <NeuronNode
                 key={`n${neuron.layerIndex}_${neuron.neuronIndex}`}
@@ -694,37 +691,6 @@ export function NeuralNetVisualizer({
               </text>
             );
           })}
-
-          {/* Connection detail tooltip */}
-          {hoveredConnection && (
-            <g>
-              <rect
-                x={(hoveredConnection.x1 + hoveredConnection.x2) / 2 - 40}
-                y={(hoveredConnection.y1 + hoveredConnection.y2) / 2 - 30}
-                width="80" height="24" rx="4"
-                fill="rgba(0,0,0,0.9)" stroke="#7c6ff7" strokeWidth="1"
-              />
-              <text
-                x={(hoveredConnection.x1 + hoveredConnection.x2) / 2}
-                y={(hoveredConnection.y1 + hoveredConnection.y2) / 2 - 15}
-                textAnchor="middle"
-                fill="#e8e8e8"
-                fontSize="8"
-              >
-                Layer {hoveredConnection.fromLayer}→{hoveredConnection.toLayer}
-              </text>
-              <text
-                x={(hoveredConnection.x1 + hoveredConnection.x2) / 2}
-                y={(hoveredConnection.y1 + hoveredConnection.y2) / 2 - 6}
-                textAnchor="middle"
-                fill={hoveredConnection.weight >= 0 ? '#10b981' : '#ef4444'}
-                fontSize="9"
-                fontWeight="bold"
-              >
-                w = {hoveredConnection.weight > 0 ? '+' : ''}{hoveredConnection.weight.toFixed(3)}
-              </text>
-            </g>
-          )}
 
           {/* Flow arrow */}
           {filteredLayers.length > 1 && (

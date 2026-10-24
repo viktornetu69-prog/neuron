@@ -69,27 +69,25 @@ export const Connections = memo<ConnectionsProps>(({
     return allConnections;
   }, [layers, positions]);
 
-  // Определяем режим подсветки
-  const isSourceLayer = hoveredNeuron && hoveredNeuron.layerIndex >= 0;
-  const highlightSourceLayer = isSourceLayer ? hoveredNeuron!.layerIndex : -1;
-  const highlightTargetLayer = isSourceLayer ? hoveredNeuron!.layerIndex + 1 : -1;
-  const highlightSourceNeuron = isSourceLayer ? hoveredNeuron!.neuronIndex : -1;
-  const highlightTargetNeuron = isSourceLayer ? hoveredNeuron!.neuronIndex : -1;
+  // Подсветка только для конкретного нейрона: входящие + исходящие связи
+  const highlightLayer = hoveredNeuron?.layerIndex ?? -1;
+  const highlightNeuron = hoveredNeuron?.neuronIndex ?? -1;
 
   return (
     <>
       {connectionData.map(conn => {
-        const fromLayerIdx = conn.fromLayer;
-        const toLayerIdx = conn.toLayer;
-        const isSourceInHighlight = fromLayerIdx === highlightSourceLayer;
-        const isSourceNeuron = conn.fromNeuron === highlightSourceNeuron;
-        const isTargetInHighlight = toLayerIdx === highlightTargetLayer;
-        const isTargetNeuron = conn.toNeuron === highlightTargetNeuron;
-        
-        // Подсвечиваем связи ОТ hovered нейрона и К hovered нейрону
-        const isHighlighted = 
-          (isSourceInHighlight && isSourceNeuron) ||
-          (isTargetInHighlight && isTargetNeuron);
+        // Исходящая связь: из этого нейрона в следующий слой
+        const isOutgoing =
+          conn.fromLayer === highlightLayer &&
+          conn.fromNeuron === highlightNeuron;
+
+        // Входящая связь: из предыдущего слоя в этот нейрон
+        const isIncoming =
+          conn.toLayer === highlightLayer &&
+          conn.toNeuron === highlightNeuron;
+
+        // Подсвечиваем только входящие и исходящие конкретного нейрона
+        const isHighlighted = isOutgoing || isIncoming;
 
         // Определяем цвет слоя для связи
         const layerColor = layers[conn.fromLayer]?.color || '#555577';
