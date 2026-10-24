@@ -2,11 +2,13 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { AppLayout } from './components/AppLayout';
 import { ChatArea } from './components/ChatArea';
 import { ModelsPanel } from './components/ModelsPanel';
+import { DatasetPanel } from './components/DatasetPanel';
 import { StatusBar } from './components/StatusBar';
 import { PluginManagerPanel } from './components/PluginManager';
 import { PreviewPanel } from './components/PreviewPanel';
 import { checkHealth, sendChat } from '@/api.client';
 import { Plugin } from '@/types';
+import { DatasetAnalysisResult } from '@/types/dataset-panel.types';
 
 type Panel = 'chat' | 'models' | 'datasets' | 'stage6' | 'plugins' | 'settings';
 
@@ -21,6 +23,7 @@ interface AppState {
   showPreview: boolean;
   isPreviewServerRunning: boolean;
   teacherAnalysis: any | null;
+  datasetAnalysis: DatasetAnalysisResult | null;
 }
 
 export default function App() {
@@ -36,6 +39,7 @@ export default function App() {
     showPreview: false,
     isPreviewServerRunning: false,
     teacherAnalysis: null,
+    datasetAnalysis: null,
   });
 
   useEffect(() => {
@@ -141,6 +145,10 @@ export default function App() {
     setState(prev => ({ ...prev, teacherAnalysis: analysis }));
   }, []);
 
+  const handleDatasetAnalysisChange = useCallback((analysis: DatasetAnalysisResult | null) => {
+    setState(prev => ({ ...prev, datasetAnalysis: analysis }));
+  }, []);
+
   return (
     <AppLayout
       sidebarExpanded={sidebarExpanded}
@@ -177,10 +185,14 @@ export default function App() {
             <ModelsPanel
               isServerAvailable={state.isServerAvailable}
               onTeacherAnalysisChange={handleTeacherAnalysisChange}
-              currentTeacherAnalysis={state.teacherAnalysis}
             />
           ) : state.panel === 'plugins' ? (
             <PluginManagerPanel />
+          ) : state.panel === 'datasets' ? (
+            <DatasetPanel
+              isServerAvailable={state.isServerAvailable}
+              onDatasetAnalysisChange={handleDatasetAnalysisChange}
+            />
           ) : (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8888aa' }}>
               <div style={{ textAlign: 'center' }}>
