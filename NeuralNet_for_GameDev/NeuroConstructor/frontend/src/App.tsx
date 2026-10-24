@@ -20,6 +20,7 @@ interface AppState {
   plugins: Plugin[];
   showPreview: boolean;
   isPreviewServerRunning: boolean;
+  teacherAnalysis: any | null;
 }
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
     plugins: [],
     showPreview: false,
     isPreviewServerRunning: false,
+    teacherAnalysis: null,
   });
 
   useEffect(() => {
@@ -135,6 +137,10 @@ export default function App() {
     setSidebarExpanded(prev => !prev);
   }, []);
 
+  const handleTeacherAnalysisChange = useCallback((analysis: any | null) => {
+    setState(prev => ({ ...prev, teacherAnalysis: analysis }));
+  }, []);
+
   return (
     <AppLayout
       sidebarExpanded={sidebarExpanded}
@@ -168,7 +174,11 @@ export default function App() {
               isServerAvailable={state.isServerAvailable}
             />
           ) : state.panel === 'models' ? (
-            <ModelsPanel isServerAvailable={state.isServerAvailable} />
+            <ModelsPanel
+              isServerAvailable={state.isServerAvailable}
+              onTeacherAnalysisChange={handleTeacherAnalysisChange}
+              currentTeacherAnalysis={state.teacherAnalysis}
+            />
           ) : state.panel === 'plugins' ? (
             <PluginManagerPanel />
           ) : (
@@ -187,6 +197,7 @@ export default function App() {
             onClose={togglePreview}
             serverRunning={state.isPreviewServerRunning}
             onToggleServer={handleTogglePreviewServer}
+            teacherAnalysis={state.teacherAnalysis}
           />
         )}
       </div>

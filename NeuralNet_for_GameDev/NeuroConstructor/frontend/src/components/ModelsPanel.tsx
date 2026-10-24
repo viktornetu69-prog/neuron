@@ -2,7 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { listTeacherFiles, listStudentFiles, uploadModel, convertModel, createStudentFromScratch, analyzeTeacherModel } from '@/api.client';
 import { ModelFile } from '@/types';
 
-export function ModelsPanel({ isServerAvailable }: { isServerAvailable: boolean }) {
+export function ModelsPanel({ isServerAvailable, onTeacherAnalysisChange, currentTeacherAnalysis }: {
+  isServerAvailable: boolean;
+  onTeacherAnalysisChange?: (analysis: any | null) => void;
+  currentTeacherAnalysis?: any | null;
+}) {
   const [teacherFiles, setTeacherFiles] = useState<ModelFile[]>([]);
   const [studentFiles, setStudentFiles] = useState<ModelFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<ModelFile | null>(null);
@@ -54,11 +58,12 @@ export function ModelsPanel({ isServerAvailable }: { isServerAvailable: boolean 
       setTeacherFiles(teacherRes.models || []);
       setStudentFiles(studentRes.models || []);
       setError(null);
+      onTeacherAnalysisChange?.(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       setError(`Failed to load files: ${msg}`);
     }
-  }, [isServerAvailable]);
+  }, [isServerAvailable, onTeacherAnalysisChange]);
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
@@ -70,10 +75,15 @@ export function ModelsPanel({ isServerAvailable }: { isServerAvailable: boolean 
       try {
         const analysis = await analyzeTeacherModel(file.filename);
         setTeacherAnalysis(analysis);
+        onTeacherAnalysisChange?.(analysis);
       } catch (err: unknown) {
         console.error('Failed to analyze model:', err);
-        setTeacherAnalysis({ status: 'error', error: 'Не удалось проанализировать модель' });
+        const errorAnalysis = { status: 'error', error: 'Не удалось проанализировать модель' };
+        setTeacherAnalysis(errorAnalysis);
+        onTeacherAnalysisChange?.(errorAnalysis);
       }
+    } else {
+      onTeacherAnalysisChange?.(null);
     }
   };
 
