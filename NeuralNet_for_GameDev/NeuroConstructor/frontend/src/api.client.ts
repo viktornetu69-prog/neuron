@@ -84,6 +84,8 @@ export async function validateModel(teacherModel: string, studentModel: string) 
 }
 
 export async function analyzeTeacherModel(filename: string) {
-  const response = await api.get(`/api/models/teacher/${filename}`);
+  // Извлекаем только имя файла без пути
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/models/teacher/${encodeURIComponent(cleanFilename)}`);
   return response.data;
 }
