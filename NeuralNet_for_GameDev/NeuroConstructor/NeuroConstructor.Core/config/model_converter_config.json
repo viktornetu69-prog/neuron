@@ -1,0 +1,30 @@
+{
+  "compression": {
+    "max_memory_gb": 4,
+    "use_activations": true,
+    "compression_level": 2,
+    "preserve_structure": true,
+    "target_compression_ratio": 0.1,
+    "specialize_layers": true,
+    "quality_threshold": 0.85
+  },
+  "validation": {
+    "min_similarity_score": 0.85,
+    "max_activation_diff": 0.1,
+    "require_architectural_match": false
+  },
+  "output": {
+    "format": "gguf",
+    "quantization": "q4_0",
+    "save_path": "models/converted"
+  },
+  "conversion": {
+    "max_memory_gb": 4,
+    "use_activations": true,
+    "compression_level": 2,
+    "preserve_structure": true,
+    "target_compression_ratio": 0.1,
+    "specialize_layers": true,
+    "quality_threshold": 0.85
+  }
+}
