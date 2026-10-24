@@ -3,7 +3,7 @@
   "architecture": {
     "model_family": "llama",
     "vocab_size": 32000,
-    "hidden_size": 640,
+    "hidden_size": 647,
     "num_layers": 5,
     "num_heads": 5,
     "head_dim": 128,
@@ -14,10 +14,10 @@
     "pad_token_id": -1
   },
   "loading": {
-    "initialized": false,
-    "weights_loaded": false,
-    "compression_applied": false,
-    "teacher_model": "",
+    "initialized": true,
+    "weights_loaded": true,
+    "compression_applied": true,
+    "teacher_model": "D:\\NeuralNet_for_GameDev\\NeuroConstructor\\tests\\_artifacts\\teacher.gguf",
     "loading_parameters": {
       "max_memory_gb": 2,
       "use_flash_attention": true,
@@ -25,10 +25,10 @@
     }
   },
   "parameters": {
-    "total_params": 0,
-    "trainable_params": 0,
-    "tensor_count": 0,
-    "initialized": false,
+    "total_params": 45820540,
+    "trainable_params": 45820540,
+    "tensor_count": 60,
+    "initialized": true,
     "memory_efficiency": 1.0
   },
   "memory": {
@@ -36,13 +36,13 @@
     "max_gb": 2.0
   },
   "performance": {
-    "inference_latency_ms": 0.0
+    "inference_latency_ms": 20.0
   },
   "compression": {
-    "applied": false,
+    "applied": true,
     "target_compression_ratio": 0.1,
     "compression_method": "quantization",
-    "ratio": 0.0,
+    "ratio": 0.9,
     "preserve_weights": true,
     "specialized_layers": [
       "attention_query",
@@ -54,16 +54,16 @@
     ]
   },
   "metadata": {
-    "created": "",
+    "created": "2026-10-23T17:59:30.660698",
     "version": "stage2.0",
     "purpose": "student_model",
     "teacher_model_info": {
       "model_type": "teacher",
-      "path": "",
+      "path": "D:\\NeuralNet_for_GameDev\\NeuroConstructor\\tests\\_artifacts\\teacher.gguf",
       "format": "gguf",
-      "file_size_bytes": 0,
-      "file_size_gb": 0.0,
-      "loaded": false,
+      "file_size_bytes": 250,
+      "file_size_gb": 2.3283064365386963e-07,
+      "loaded": true,
       "architecture": {
         "model_family": "llama",
         "vocab_size": 32000,
@@ -78,22 +78,26 @@
         "total_params": 0,
         "trainable_params": 0,
         "tensor_count": 0,
-        "file_size_gb": 0.0
+        "file_size_gb": 2.3283064365386963e-07
       },
-      "loading_time": "",
+      "loading_time": "2026-10-23T17:59:30.660660",
       "diagnostics": {
         "reader": "builtin_header_parser",
         "gguf_version": 3,
         "tensor_count": 0,
-        "metadata_keys": 0
+        "metadata_keys": 6
       },
-      "warnings": [],
+      "warnings": [
+        "The 'gguf' package is not installed - architecture was parsed from the raw header."
+      ],
       "errors": [],
       "validation": {
-        "compatible": false,
-        "score": 0.0,
+        "compatible": true,
+        "score": 1.0,
         "issues": [],
-        "warnings": [],
+        "warnings": [
+          "Parameter count is unknown or zero"
+        ],
         "recommendations": [],
         "min_similarity_score": 0.85
       }

@@ -17,11 +17,6 @@
     </PackageReference>
   </ItemGroup>
 
-  <!-- Proto file mapping (assuming proto file is copied here or generated) -->
-  <ItemGroup>
-    <Protobuf Include="..\NeuroConstructor.Core\core\NeuroConstructor.proto" GrpcServices="Client" Link="NeuroConstructor.proto" />
-  </ItemGroup>
-
   <!-- Allow the gRPC client to use unencrypted HTTP/2 against localhost. -->
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport" Value="true" />

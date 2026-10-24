@@ -41,4 +41,22 @@ def serve():
 
 
 if __name__ == '__main__':
+    # Write PID file for tracking by startup script
+    import os
+    pid_file = os.path.join(_CORE_DIR, "server.pid")
+    with open(pid_file, "w") as f:
+        f.write(str(os.getpid()))
+    
+    # Setup file logging
+    log_file = os.path.join(_CORE_DIR, "server.log")
+    os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else ".", exist_ok=True)
+    
+    import logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(log_file, encoding="utf-8")
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
     serve()
