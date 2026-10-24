@@ -617,7 +617,15 @@ export function NeuralNetVisualizer({
 
       {/* ===== Canvas ===== */}
       <div
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: isDragging ? 'move' : 'grab' }}
+        style={{
+          flex: 1,
+          overflow: 'auto', // FIX: auto вместо hidden — скролл появляется когда контент шире контейнера
+          position: 'relative',
+          cursor: isDragging ? 'move' : 'grab',
+          // Добавляем скроллбары для навигации по слоям
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#3a3a4e #0a0a0f',
+        }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -627,8 +635,8 @@ export function NeuralNetVisualizer({
         aria-label={`Архитектура: ${filteredLayers.length} слоёв`}
       >
         <svg
-          width={containerSize.width}
-          height={containerSize.height}
+          width={containerSize.width + 200} // Добавляем padding чтобы контент не обрезался по краям
+          height={containerSize.height + 100}
           style={{
             position: 'absolute', top: 0, left: 0,
             transform: `translate(${displayPan.x}px,${displayPan.y}px) scale(${displayZoom})`,
