@@ -163,7 +163,7 @@ export function NeuralNetVisualizer({
   const [selectedScrollLayer, setSelectedScrollLayer] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<GGUFGroupType | 'all'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all'>('all');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   const [hoveredConnection, setHoveredConnection] = useState<ConnectionWeight | null>(null);
@@ -283,20 +283,11 @@ export function NeuralNetVisualizer({
     };
   }, [filteredLayers]);
 
-  // Auto-fit
-  const autoFit: AutoFitResult = useMemo(() => {
-    const w = containerSize.width;
-    const h = containerSize.height - 60;
-    const s = Math.min(w / layout.contentWidth, h / layout.contentHeight, 1.1);
-    return {
-      scale: s,
-      panX: (w - layout.contentWidth * s) / 2 - layout.minX * s,
-      panY: (h - layout.contentHeight * s) / 2 - layout.minY * s + 10,
-    };
-  }, [layout, containerSize]);
-
-  const displayPan = userPanned ? pan : { x: autoFit.panX, y: autoFit.panY };
-  const displayZoom = userPanned ? zoom : autoFit.scale;
+  // Убрано: auto-fit — он ломал позиционирование
+  // Теперь: zoom по колёсику мыши, drag для навигации
+  // Все 39 слоёв видны изначально
+  const displayPan = pan;
+  const displayZoom = zoom;
 
   // Обработчики зума
   const zoomIn = useCallback(() => setZoom(prev => Math.min(3, prev + 0.2)), []);
@@ -511,24 +502,6 @@ export function NeuralNetVisualizer({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {/* Фильтры */}
-          {(['all', 'input', 'embedding', 'hidden', 'output'] as const).map(filter => (
-            <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              style={{
-                padding: '3px 8px',
-                background: activeFilter === filter ? '#7c6ff7' : '#1a1a2e',
-                border: '1px solid #2a2a3e',
-                borderRadius: 4,
-                color: activeFilter === filter ? 'white' : '#8888aa',
-                cursor: 'pointer',
-                fontSize: 10,
-              }}
-            >
-              {filter === 'all' ? 'Все' : filter === 'input' ? 'Вход' : filter === 'embedding' ? 'Эмбедд' : filter === 'hidden' ? 'Скрытые' : 'Выход'}
-            </button>
-          ))}
           {/* Поиск */}
           <button onClick={() => setShowSearch(!showSearch)} style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -615,16 +588,18 @@ export function NeuralNetVisualizer({
         </div>
       )}
 
-      {/* ===== Canvas ===== */}
+      {/* ===== Canvas — scrollable container ===== */}
       <div
         style={{
           flex: 1,
-          overflow: 'auto', // FIX: auto вместо hidden — скролл появляется когда контент шире контейнера
+          overflow: 'auto', // Позволяет скроллить когда контент больше экрана
           position: 'relative',
           cursor: isDragging ? 'move' : 'grab',
-          // Добавляем скроллбары для навигации по слоям
           scrollbarWidth: 'thin',
           scrollbarColor: '#3a3a4e #0a0a0f',
+          // Обеспечиваем минимальный размер контейнера
+          minWidth: containerSize.width,
+          minHeight: containerSize.height,
         }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
@@ -635,12 +610,12 @@ export function NeuralNetVisualizer({
         aria-label={`Архитектура: ${filteredLayers.length} слоёв`}
       >
         <svg
-          width={containerSize.width + 200} // Добавляем padding чтобы контент не обрезался по краям
-          height={containerSize.height + 100}
+          width={layout.contentWidth + 100}
+          height={layout.contentHeight + 80}
           style={{
             position: 'absolute', top: 0, left: 0,
             transform: `translate(${displayPan.x}px,${displayPan.y}px) scale(${displayZoom})`,
-            transformOrigin: '0 0',
+            transformOrigin: 'top left',
             transition: 'transform 0.3s ease',
           }}
         >
@@ -667,25 +642,7 @@ export function NeuralNetVisualizer({
             ))}
           </defs>
 
-          {/* GGUF groups */}
-          {filteredLayers.map((layer, layerIndex) => {
-            const config = GGUF_GROUP_CONFIG[layer.ggufType];
-            const isActive = hoveredNeuron && hoveredNeuron.layerIndex === layerIndex;
-            return (
-              <GGUFGroup
-                key={`gguf-${layerIndex}`}
-                config={config}
-                layerIndex={layerIndex}
-                totalLayers={filteredLayers.length}
-                isActive={!!isActive}
-                onClick={handleScrollLayerClick}
-                x={START_X + layerIndex * LAYER_GAP}
-                y={CENTER_Y}
-              />
-            );
-          })}
-
-          {/* Connections with weights */}
+          {/* Connections with weights — рисуем перед нейронами */}
           <Connections
             layers={filteredLayers.map(l => ({ color: l.color, colorLight: l.colorLight, colorDark: l.colorDark }))}
             positions={layout.positions}
@@ -711,6 +668,30 @@ export function NeuralNetVisualizer({
                 onFocus={() => handleNeuronHover(neuron.layerIndex, neuron.neuronIndex)}
                 onBlur={handleNeuronLeave}
               />
+            );
+          })}
+
+          {/* Layer labels — подписи слоёв над каждым слоем */}
+          {filteredLayers.map((layer, layerIndex) => {
+            const layerPositions = layout.positions.filter(n => n.layerIndex === layerIndex);
+            if (layerPositions.length === 0) return null;
+            
+            const firstNeuron = layerPositions[0];
+            const maxYInLayer = Math.max(...layerPositions.map(n => n.y));
+            
+            return (
+              <text
+                key={`label-${layerIndex}`}
+                x={firstNeuron.x}
+                y={maxYInLayer + 35}
+                textAnchor="middle"
+                fill={layer.color}
+                fontSize="10"
+                fontWeight="600"
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+              >
+                {layer.shortName}
+              </text>
             );
           })}
 
