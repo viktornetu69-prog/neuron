@@ -338,6 +338,46 @@ async def create_dataset(template_name: str = "default", count: int = 10):
         logger.error(f"Create dataset error: {e}")
         return {"error": str(e)}
 
+@app.post("/api/datasets/analyze")
+async def analyze_dataset(request: Dict[str, str]):
+    """Анализ датасета (Stage 3)"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        dataset_path = request.get("dataset_path", "")
+        result = server_state["engine"].analyze_dataset(dataset_path)
+        return result
+    except Exception as e:
+        logger.error(f"Analyze dataset error: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/datasets/preview")
+async def get_dataset_preview(path: str, rows: int = 5):
+    """Предварительный просмотр датасета (Stage 3)"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].get_dataset_preview(path, rows)
+        return result
+    except Exception as e:
+        logger.error(f"Dataset preview error: {e}")
+        return {"rows": [], "error": str(e)}
+
+@app.post("/api/datasets/activations")
+async def analyze_activations(request: Dict[str, Any]):
+    """Анализ активаций нейронной сети (Stage 3)"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        dataset_id = request.get("dataset_id", "")
+        model_path = request.get("model_path", "")
+        layer_names = request.get("layer_names", [])
+        result = server_state["engine"].analyze_activations(dataset_id, model_path, layer_names)
+        return result
+    except Exception as e:
+        logger.error(f"Activations analysis error: {e}")
+        return {"success": False, "error": str(e)}
+
 # ============================================
 # Model file management endpoints
 # ============================================
