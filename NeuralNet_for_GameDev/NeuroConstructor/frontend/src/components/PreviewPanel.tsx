@@ -499,10 +499,30 @@ export function PreviewPanel({ isOpen, onClose, serverRunning, onToggleServer, t
                 fontSize: 14,
                 color: '#8888aa',
                 lineHeight: 1.6,
+                marginBottom: 8,
+              }}>
+                Сначала выберите Teacher модель в панели «Модели» — нажмите на файл модели.
+              </p>
+              <p style={{
+                fontSize: 13,
+                color: '#666688',
                 marginBottom: 24,
               }}>
-                Выберите Teacher модель в панели моделей и нажмите анализ, затем переключитесь на вкладку "🧠 Сеть"
+                После анализа данных переключитесь на вкладку «🧠 Сеть»
               </p>
+              <button
+                onClick={() => {
+                  const modelsButton = document.querySelector('[data-panel="models"]') as HTMLElement;
+                  modelsButton?.click();
+                }}
+                style={{
+                  padding: '12px 32px', background: 'linear-gradient(135deg, #7c6ff7 0%, #9d8fff 100%)',
+                  border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+                  fontSize: 14, fontWeight: 600,
+                }}
+              >
+                Открыть панель моделей
+              </button>
             </div>
           </div>
         )}
