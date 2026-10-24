@@ -1,6 +1,10 @@
 /**
  * GGUFGroup — визуализация GGUF-специфичных групп слоёв
- * Отображает специфичные элементы: матрицы, attention heads, FFN блоки
+ * 
+ * Исправлено:
+ * - Все тексты на русском языке
+ * - Элементы не накладываются друг на друга (каждый ниже предыдущего)
+ * - Улучшенная читаемость подписей
  */
 
 import React, { memo } from 'react';
@@ -29,7 +33,6 @@ interface GGUFGroupProps {
  */
 const WeightMatrix: React.FC<{ color: string; size?: number }> = memo(({ color, size = 40 }) => (
   <g>
-    {/* Grid матрицы */}
     {[...Array(5)].map((_, row) =>
       [...Array(5)].map((_, col) => (
         <rect
@@ -44,7 +47,6 @@ const WeightMatrix: React.FC<{ color: string; size?: number }> = memo(({ color, 
         />
       ))
     )}
-    {/* Граница */}
     <rect
       x={-size / 2}
       y={-size / 2}
@@ -64,33 +66,35 @@ WeightMatrix.displayName = 'WeightMatrix';
 /**
  * Визуализация attention heads (для transformer блоков)
  */
-const AttentionHeads: React.FC<{ color: string; count?: number }> = memo(({ color, count = 8 }) => (
-  <g>
-    {[...Array(Math.min(count, 8))].map((_, i) => {
-      const headWidth = 6;
-      const gap = 3;
-      const totalWidth = count * headWidth + (count - 1) * gap;
-      const x = -totalWidth / 2 + i * (headWidth + gap);
-      
-      return (
-        <rect
-          key={`h${i}`}
-          x={x}
-          y="-10"
-          width={headWidth}
-          height="20"
-          fill={color}
-          opacity={0.3 + (i / count) * 0.5}
-          rx="1"
-        />
-      );
-    })}
-    {/* Подписи */}
-    <text x="0" y="20" textAnchor="middle" fill="#8888aa" fontSize="8">
-      {count} heads
-    </text>
-  </g>
-));
+const AttentionHeads: React.FC<{ color: string; count?: number }> = memo(({ color, count = 8 }) => {
+  const displayCount = Math.min(count, 8);
+  const headWidth = 6;
+  const gap = 3;
+  const totalWidth = displayCount * headWidth + (displayCount - 1) * gap;
+  
+  return (
+    <g>
+      {[...Array(displayCount)].map((_, i) => {
+        const x = -totalWidth / 2 + i * (headWidth + gap);
+        return (
+          <rect
+            key={`h${i}`}
+            x={x}
+            y="-10"
+            width={headWidth}
+            height="20"
+            fill={color}
+            opacity={0.3 + (i / displayCount) * 0.5}
+            rx="1"
+          />
+        );
+      })}
+      <text x="0" y="22" textAnchor="middle" fill="#8888aa" fontSize="7">
+        {displayCount} заголовков
+      </text>
+    </g>
+  );
+});
 
 AttentionHeads.displayName = 'AttentionHeads';
 
@@ -99,38 +103,11 @@ AttentionHeads.displayName = 'AttentionHeads';
  */
 const FFNBlock: React.FC<{ color: string }> = memo(({ color }) => (
   <g>
-    {/* Input projection */}
-    <rect
-      x="-25"
-      y="-15"
-      width="50"
-      height="12"
-      fill={color}
-      opacity="0.4"
-      rx="2"
-    />
-    {/* Activation */}
-    <rect
-      x="-25"
-      y="0"
-      width="50"
-      height="12"
-      fill={color}
-      opacity="0.6"
-      rx="2"
-    />
-    {/* Output projection */}
-    <rect
-      x="-25"
-      y="15"
-      width="50"
-      height="12"
-      fill={color}
-      opacity="0.4"
-      rx="2"
-    />
-    <text x="0" y="35" textAnchor="middle" fill="#8888aa" fontSize="8">
-      FFN (hidden×4)
+    <rect x="-25" y="-15" width="50" height="12" fill={color} opacity="0.4" rx="2" />
+    <rect x="-25" y="0" width="50" height="12" fill={color} opacity="0.6" rx="2" />
+    <rect x="-25" y="15" width="50" height="12" fill={color} opacity="0.4" rx="2" />
+    <text x="0" y="37" textAnchor="middle" fill="#8888aa" fontSize="7">
+      FFN (×4 скрытый)
     </text>
   </g>
 ));
@@ -152,8 +129,8 @@ const LayerNorm: React.FC<{ color: string }> = memo(({ color }) => (
       strokeDasharray="4,2"
       opacity="0.6"
     />
-    <text x="0" y="20" textAnchor="middle" fill="#8888aa" fontSize="8">
-      LayerNorm
+    <text x="0" y="22" textAnchor="middle" fill="#8888aa" fontSize="7">
+      Нормализация
     </text>
   </g>
 ));
@@ -164,9 +141,6 @@ LayerNorm.displayName = 'LayerNorm';
 // Основной компонент
 // ============================================================================
 
-/**
- * GGUFGroup — отрисовывает специфичные элементы для группы слоёв
- */
 const GGUFGroup: React.FC<GGUFGroupProps> = ({
   config,
   layerIndex,
@@ -181,21 +155,20 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
       case 'input':
         return (
           <g>
-            {/* Tokenizer icon */}
-            <text x="0" y="-15" textAnchor="middle" fill="#e8e8e8" fontSize="10" fontWeight="600">
-              🔤 Tokenizer
+            <text x="0" y="-20" textAnchor="middle" fill="#e8e8e8" fontSize="9" fontWeight="600">
+              📝 Токенизатор
             </text>
             <rect
-              x="-30"
-              y="-5"
-              width="60"
-              height="20"
+              x="-35"
+              y="-6"
+              width="70"
+              height="18"
               fill="#ef4444"
-              opacity="0.3"
+              opacity="0.25"
               rx="4"
             />
-            <text x="0" y="8" textAnchor="middle" fill="#fff" fontSize="9">
-              Text → IDs
+            <text x="0" y="7" textAnchor="middle" fill="#fff" fontSize="8">
+              Текст → Номера
             </text>
           </g>
         );
@@ -203,13 +176,12 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
       case 'embedding':
         return (
           <g>
-            {/* Embedding weights */}
-            <text x="0" y="-15" textAnchor="middle" fill="#e8e8e8" fontSize="10" fontWeight="600">
-              Embedding Weights
+            <text x="0" y="-20" textAnchor="middle" fill="#e8e8e8" fontSize="9" fontWeight="600">
+              🔤 Матрицы Встраиваний
             </text>
-            <WeightMatrix color="#f97316" size={35} />
-            <text x="0" y="28" textAnchor="middle" fill="#8888aa" fontSize="8">
-              Wte + Wpe
+            <WeightMatrix color="#f97316" size={30} />
+            <text x="0" y="24" textAnchor="middle" fill="#8888aa" fontSize="7">
+              Слова + Позиции
             </text>
           </g>
         );
@@ -217,17 +189,19 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
       case 'hidden':
         return (
           <g>
-            {/* Attention heads */}
-            <AttentionHeads color="#84cc16" count={config.layerCount > 12 ? 12 : config.layerCount} />
-            {/* FFN block */}
-            <g transform="translate(0, 35)">
+            {/* Attention heads — самый верхний элемент */}
+            <g transform="translate(0, -18)">
+              <AttentionHeads color="#84cc16" count={config.layerCount > 12 ? 12 : config.layerCount} />
+            </g>
+            {/* FFN блок — ниже */}
+            <g transform="translate(0, 5)">
               <FFNBlock color="#84cc16" />
             </g>
-            {/* Layer norm */}
-            <g transform="translate(-30, 35)">
+            {/* Нормализация — две штуки по бокам внизу */}
+            <g transform="translate(-22, 26)">
               <LayerNorm color="#84cc16" />
             </g>
-            <g transform="translate(30, 35)">
+            <g transform="translate(22, 26)">
               <LayerNorm color="#84cc16" />
             </g>
           </g>
@@ -236,12 +210,12 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
       case 'output':
         return (
           <g>
-            <text x="0" y="-15" textAnchor="middle" fill="#e8e8e8" fontSize="10" fontWeight="600">
-              LM Head
+            <text x="0" y="-20" textAnchor="middle" fill="#e8e8e8" fontSize="9" fontWeight="600">
+              🎯 Заголовок ЯМ
             </text>
-            <WeightMatrix color="#10b981" size={30} />
-            <text x="0" y="28" textAnchor="middle" fill="#8888aa" fontSize="8">
-              Projection → vocab
+            <WeightMatrix color="#10b981" size={28} />
+            <text x="0" y="24" textAnchor="middle" fill="#8888aa" fontSize="7">
+              Проекция → Словарь
             </text>
           </g>
         );
@@ -257,7 +231,7 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
       style={{ cursor: 'pointer' }}
       opacity={isActive ? 1 : 0.7}
     >
-      {/* Glow effect */}
+      {/* Glow effect при активности */}
       {isActive && (
         <circle
           cx={x}
@@ -277,7 +251,7 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
         </circle>
       )}
 
-      {/* Base circle */}
+      {/* Базовый круг */}
       <circle
         cx={x}
         cy={y}
@@ -287,25 +261,25 @@ const GGUFGroup: React.FC<GGUFGroupProps> = ({
         strokeWidth="2"
       />
 
-      {/* Visual elements */}
+      {/* Визуальные элементы */}
       <g transform={`translate(${x}, ${y})`}>
         {renderVisualElements()}
       </g>
 
-      {/* Label */}
+      {/* Подпись */}
       <text
         x={x}
-        y={y + 35}
+        y={y + 52}
         textAnchor="middle"
         fill={config.color}
-        fontSize="9"
+        fontSize="8"
         fontWeight="700"
       >
         {config.name}
       </text>
       <text
         x={x}
-        y={y + 45}
+        y={y + 61}
         textAnchor="middle"
         fill="#8888aa"
         fontSize="7"

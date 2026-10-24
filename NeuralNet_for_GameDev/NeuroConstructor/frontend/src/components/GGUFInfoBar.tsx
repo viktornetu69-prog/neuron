@@ -1,6 +1,10 @@
 /**
  * GGUFInfoBar — информационная панель с GGUF-специфичными деталями
- * Отображает формат, квантование и специфичные параметры GGUF
+ * 
+ * Исправлено:
+ * - Все тексты на русском
+ * - Better layout чтобы текст не обрезался
+ * - Clearer layer type descriptions
  */
 
 import React, { memo } from 'react';
@@ -43,9 +47,6 @@ interface GGUFInfoBarProps {
 // Утилиты
 // ============================================================================
 
-/**
- * Определяет тип слоя по индексу
- */
 function getLayerType(
   layerIndex: number,
   totalLayers: number,
@@ -73,25 +74,18 @@ function getLayerType(
   return 'transformer';
 }
 
-/**
- * Форматирует размер квантования GGUF
- */
-function formatGGUFQuantization(headDim?: number, numLayers?: number): string {
-  if (!headDim || !numLayers) return 'N/A';
-  // Определяем примерный размер на основе параметров
-  const totalParams = headDim * numLayers * 12;
-  if (totalParams < 1_000_000) return 'Q4_0 (4-bit)';
-  if (totalParams < 10_000_000) return 'Q4_K_M (4-bit mixed)';
-  return 'Q5_K_M (5-bit mixed)';
+function formatNumber(num?: number): string {
+  if (!num) return 'N/A';
+  if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(1) + 'B';
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+  if (num >= 1_000) return (num / 1_000).toFixed(0) + 'K';
+  return num.toString();
 }
 
 // ============================================================================
 // Основной компонент
 // ============================================================================
 
-/**
- * GGUFInfoBar — отображает GGUF-специфичную информацию о слое
- */
 const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
   hoveredNeuron,
   layers,
@@ -107,62 +101,69 @@ const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
     architecture.model_family
   );
 
-  // GGUF-специфичная информация
-  const ggufInfo = (() => {
+  // Информация в зависимости от типа слоя
+  const getContent = () => {
     switch (layerType) {
       case 'input':
         return {
-          title: '🔤 Input Layer — Tokenizer',
+          icon: '📝',
+          title: 'Входной слой — Токенизатор',
           details: [
             `Модель: ${(architecture.model_family || 'unknown').toUpperCase()}`,
-            `Вход: текст → токены`,
-            `Словарь: ${architecture.vocab_size?.toLocaleString() || 'N/A'} токенов`,
+            `Преобразование: текст → числа (токены)`,
+            `Размер словаря: ${formatNumber(architecture.vocab_size)} уникальных токенов`,
           ],
-          gguf: 'Format: GGUF v3',
+          badge: 'GGUF v3',
         };
 
       case 'embedding':
         return {
-          title: '📊 Embedding Layer — Weight Matrices',
+          icon: '🔤',
+          title: 'Слой встраиваний — Матрицы весов',
           details: [
-            `Wte: ${architecture.vocab_size?.toLocaleString()} × ${architecture.hidden_size?.toLocaleString()}`,
-            `Wpe: ${architecture.max_position_embeddings?.toLocaleString()} × ${architecture.hidden_size?.toLocaleString()}`,
-            `Тип: float16 → квантование`,
+            `Wte (слова): ${formatNumber(architecture.vocab_size)} × ${formatNumber(architecture.hidden_size)}`,
+            `Wpe (позиции): ${formatNumber(architecture.max_position_embeddings)} × ${formatNumber(architecture.hidden_size)}`,
+            `Тип данных: float16 → квантование`,
           ],
-          gguf: `Quant: ${formatGGUFQuantization(architecture.head_dim, architecture.num_layers)}`,
+          badge: 'Встраивания',
         };
 
       case 'transformer':
         return {
-          title: '🧠 Transformer Block — MHA + FFN',
+          icon: '🧠',
+          title: 'Трансформер блок — Внимание + FFN',
           details: [
-            `Attention: ${architecture.num_heads} heads × ${architecture.head_dim || 'N/A'} dim`,
-            `KV Heads: ${architecture.num_kv_heads || architecture.num_heads}`,
-            `FFN: hidden × 4 expansion`,
-            `RoPE θ: ${architecture.rope_theta?.toLocaleString() || 'N/A'}`,
+            `Multi-Head Attention: ${architecture.num_heads} головок × ${formatNumber(architecture.head_dim)} размер`,
+            `KV головки: ${architecture.num_kv_heads || architecture.num_heads}`,
+            `FFN: расширение скрытого слоя в 4 раза`,
+            `RoPE позиционные: θ = ${formatNumber(architecture.rope_theta)}`,
           ],
-          gguf: `Layers: ${architecture.num_layers} blocks`,
+          badge: `Слой ${hoveredNeuron.layerIndex + 1} из ${layers.length}`,
         };
 
       case 'output':
         return {
-          title: '🎯 Output Layer — LM Head',
+          icon: '🎯',
+          title: 'Выходной слой — Заголовок языковой модели',
           details: [
-            `Projection: ${architecture.hidden_size?.toLocaleString()} → ${architecture.vocab_size?.toLocaleString()}`,
-            `Output: probability distribution`,
-            `Softmax over vocabulary`,
+            `Проекция: ${formatNumber(architecture.hidden_size)} → ${formatNumber(architecture.vocab_size)}`,
+            `Результат: распределение вероятностей`,
+            `Softmax над всем словарём`,
           ],
-          gguf: 'Format: weight_matrix',
+          badge: 'Прогноз',
         };
 
       default:
         return {
+          icon: '🔵',
           title: layer.name,
-          details: [`Нейронов: ${layer.neuronCount}`],
-          gguf: '',
+          details: [`Количество нейронов: ${layer.neuronCount}`],
+          badge: '',
         };
     }
-  })();
+  };
+
+  const content = getContent();
 
   return (
     <div
@@ -175,15 +176,16 @@ const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
         background: '#0f0f1a',
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
+        gap: 12,
         flexShrink: 0,
+        minHeight: 50,
       }}
     >
       {/* Цветной индикатор */}
       <div
         style={{
-          width: 10,
-          height: 10,
+          width: 12,
+          height: 12,
           borderRadius: '50%',
           background: layer.color,
           flexShrink: 0,
@@ -192,23 +194,55 @@ const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
         aria-hidden="true"
       />
 
-      {/* Основная информация */}
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#e8e8e8', marginBottom: 2 }}>
-          {ggufInfo.title}
-        </div>
-        <div style={{ fontSize: 10, color: '#8888aa', lineHeight: 1.4 }}>
-          {ggufInfo.details.map((detail, i) => (
-            <div key={i}>{detail}</div>
-          ))}
+      {/* Иконка и заголовок */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 16 }}>{content.icon}</span>
+        <div style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: '#e8e8e8',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: 200,
+        }}>
+          {content.title}
         </div>
       </div>
 
-      {/* GGUF формат */}
-      {ggufInfo.gguf && (
+      {/* Детали */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        gap: 16,
+        overflowX: 'auto',
+        overflowY: 'hidden',
+      }}>
+        {content.details.map((detail, i) => (
+          <div
+            key={i}
+            style={{
+              fontSize: 10,
+              color: '#8888aa',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            {detail}
+          </div>
+        ))}
+      </div>
+
+      {/* Бейдж */}
+      {content.badge && (
         <div
           style={{
-            padding: '4px 10px',
+            padding: '3px 8px',
             background: '#1a1a2e',
             border: '1px solid #2a2a3e',
             borderRadius: 4,
@@ -216,9 +250,10 @@ const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
             color: '#7c6ff7',
             whiteSpace: 'nowrap',
             fontWeight: 600,
+            flexShrink: 0,
           }}
         >
-          {ggufInfo.gguf}
+          {content.badge}
         </div>
       )}
     </div>
