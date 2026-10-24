@@ -1,6 +1,10 @@
 # Large model files - do not commit
 *.gguf
 
+# Node modules
+**/node_modules/
+**/dist/
+
 # SSH keys
 github_ed25519
 github_ed25519.pub

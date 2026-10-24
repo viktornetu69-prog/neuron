@@ -1,0 +1,55 @@
+{
+  "name": "neuroconstructor",
+  "version": "1.0.0",
+  "description": "NeuroConstructor - Neural Network Constructor with Plugin System",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:electron\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .",
+    "build": "cd frontend && npm run build && electron-builder",
+    "build:win": "cd frontend && npm run build && electron-builder --win",
+    "build:mac": "cd frontend && npm run build && electron-builder --mac",
+    "build:linux": "cd frontend && npm run build && electron-builder --linux",
+    "electron": "electron .",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.neuroconstructor.app",
+    "productName": "NeuroConstructor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "backend/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "author": "NeuroConstructor Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0"
+  }
+}

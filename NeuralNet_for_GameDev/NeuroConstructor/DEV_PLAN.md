@@ -15,20 +15,19 @@
 ## 2. Текущественное состояние реализации
 
 ### ✅ Завершено
-- gRPC инфраструктура + RPC (Chat, Status, ListModels, LoadModel, CreateEmptyGGUF, SaveModel, Dataset*, Model*)
 - Teacher/Student pipeline + quality_assurance + real_quantizer
 - Plugin system (Stage 4) — полная реализация
 - Testing framework (Stage 5) — 3 модуля (`framework_components`, `advanced_framework`, `framework_integration`)
+- REST API (FastAPI) — `backend/main.py`
 - **Stage 6 AI** — `ai_plugin.py` ✅
 - **Stage 6 Forecast** — `forecast_engine.py` ✅
 - **Stage 6 AutoFix** — `auto_fix_engine.py` ✅
 - **Stage 6 SelfLearning** — `self_learning.py` ✅
 - **Stage 6 Unified** — `stage6_unified_plugin.py` ✅
 - **Stage 6 Integration** — `stage6_integration.py` ✅
-- C# WPF UI — Stage 2 кнопки добавлены, починка сборки в процессе
+- React UI (DeepSeek Harness style) — `frontend/`
 
 ### 🟡 В процессе / ограничения
-- C# UI: ошибки сборки (CS0234, CS0400/CS0538, CS0426) — журнал `01_журнал_идей.md`, раздел 10.3
 - Student — пока архитектурное описание (JSON), не runnable GGUF
 - Teacher — инспекция, веса не выполняются
 
@@ -127,8 +126,7 @@ Stage6Integration (Singleton orchestrator)
 6. **Settings/Inspector** — ресурсы, провайдеры, слоты.
 
 ### 4.2 Технологии UI
-- **Web UI:** `npx @deepseek-ai/dsh web` (TypeScript, registries, slots) — порт `3080`.
-- **Desktop:** WPF (текущий) — миграция не обязательна, но архитектура плагинов переносится.
+- **Web UI:** React + TypeScript + Vite — порт `3000`.
 - **Hot reload:** аналог `cordis.patch.yml` — подписка на события плагинов.
 
 ---
@@ -152,9 +150,9 @@ Stage6Integration (Singleton orchestrator)
 
 ### 6.1 Внешний вид (UI/UX)
 **Текущее (факт):**
-- WPF `MainWindow.xaml`: `Title="NeuroConstructor: Core UI"`, Height 700, Width 900
-- Chat: `ListBox` + `TextBlock` (Run), FontFamily `Consolas`
-- Controls: `GroupBox "Model Operations"`, `GroupBox "Dataset Operations"`, `TextBox` + `Send`/`Clear` buttons
+- React `App.tsx` с Vite, тёмная тема
+- Chat: `ListBox` + `TextBlock`, FontFamily `Consolas`
+- Controls: кнопки, панели навигации
 
 **Целевой (DeepSeek Harness inspired):**
 - Современная тема (тёмная/светлая), карточки, sidebar, hero dock (collapsed when empty)
@@ -165,7 +163,7 @@ Stage6Integration (Singleton orchestrator)
 ### 6.2 Мультиязычность
 - **Текущее:** UI — английский (`Load Teacher`...), статусы/доки — русский/английский
 - **Цель:** i18n — EN / RU (основные), + EN / ZH (как в DeepSeek Harness: `*.i18n.yaml`, BRAND_GUIDELINES.i18n.yaml)
-- Ресурсы строк для WPF (`.resx`) и Python (`locale/`)
+- Ресурсы строк для React (`i18next`) и Python (`locale/`)
 
 ---
 
