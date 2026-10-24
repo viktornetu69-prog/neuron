@@ -358,7 +358,7 @@ export function NeuralNetVisualizer({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Навигация по слоям
+  // Плавная навигация по слоям с анимацией
   const handleScrollLayerClick: (layerIndex: number) => void = useCallback(
     (layerIndex: number) => {
       setSelectedScrollLayer(layerIndex);
@@ -589,6 +589,7 @@ export function NeuralNetVisualizer({
             left: 0,
             transform: `translate(${displayPan.x}px,${displayPan.y}px) scale(${displayZoom})`,
             transformOrigin: '0 0',
+            transition: 'transform 0.3s ease',
           }}
         >
           {/* Определения: градиенты и фильтры */}
@@ -734,6 +735,46 @@ export function NeuralNetVisualizer({
         onLayerClick={handleScrollLayerClick}
       />
 
+      {/* ===== 3 Примера архитектур ===== */}
+      <div style={{
+        padding: '12px 20px',
+        borderTop: '1px solid #1a1a2e',
+        background: '#0f0f1a',
+        display: 'flex',
+        gap: 16,
+        overflow: 'auto',
+        flexShrink: 0,
+      }}>
+        <h4 style={{
+          color: '#8888aa',
+          fontSize: 12,
+          margin: 0,
+          marginRight: 12,
+          alignSelf: 'center',
+          whiteSpace: 'nowrap',
+        }}>
+          Примеры архитектур:
+        </h4>
+        <ExampleCard
+          title="BERT"
+          layers="Input → Embedding → 12 Transformer Blocks → Output"
+          details="Encoder-only • 12 layers • 768 hidden • 12 heads"
+          color="#ef4444"
+        />
+        <ExampleCard
+          title="GPT"
+          layers="Input → Embedding → Transformer Blocks • LayerNorm → Output"
+          details="Decoder-only • 12 layers • 768 hidden • 12 heads"
+          color="#3b82f6"
+        />
+        <ExampleCard
+          title="T5"
+          layers="Encoder → Decoder (cross-attn) → Output"
+          details="Encoder-Decoder • Text-to-Text • Multi-Task"
+          color="#10b981"
+        />
+      </div>
+
       {/* ===== GGUF Info Bar ===== */}
       <GGUFInfoBar
         hoveredNeuron={hoveredNeuron}
@@ -741,6 +782,76 @@ export function NeuralNetVisualizer({
         architecture={arch}
         parameters={parameters || {}}
       />
+    </div>
+  );
+}
+
+/**
+ * Компонент карточки примера архитектуры
+ */
+function ExampleCard({
+  title,
+  layers,
+  details,
+  color,
+}: {
+  title: string;
+  layers: string;
+  details: string;
+  color: string;
+}) {
+  const [isHovered, setIsHovered] = useState<boolean>(false);
+
+  return (
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        flex: 1,
+        minWidth: 200,
+        padding: '10px 14px',
+        background: isHovered ? `${color}15` : '#121220',
+        border: `1px solid ${isHovered ? color : '#1e1e30'}`,
+        borderRadius: 8,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+      }}
+    >
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 6,
+      }}>
+        <div style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: color,
+          flexShrink: 0,
+        }} />
+        <div style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#e8e8e8',
+        }}>
+          {title}
+        </div>
+      </div>
+      <div style={{
+        fontSize: 11,
+        color: '#8888aa',
+        marginBottom: 4,
+        fontFamily: 'monospace',
+      }}>
+        {layers}
+      </div>
+      <div style={{
+        fontSize: 10,
+        color: '#666688',
+      }}>
+        {details}
+      </div>
     </div>
   );
 }
