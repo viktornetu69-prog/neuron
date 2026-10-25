@@ -5,7 +5,9 @@ NeuroConstructor REST API Server
 
 import sys
 import os
+import json
 import logging
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 
@@ -243,25 +245,23 @@ async def create_student_model(request: CreateStudentRequest):
 
 @app.post("/api/models/student/scratch", response_model=CreateStudentResponse)
 async def create_student_from_scratch(request: StudentArchitectureRequest):
-    """Создать Student модель с нуля по параметрам архитектуры через ModelConverter"""
+    """Создать Student модель с нуля по параметрам архитектуры"""
     logger.info(f"Creating student from scratch: {request.model_family}")
-    
-    if not server_state["engine"]:
-        logger.error("Engine not initialized")
-        raise HTTPException(status_code=503, detail="Engine not initialized")
+
+    # Для создания Student с нуля engine НЕ требуется — только сохраняем конфиг
     
     try:
-        from NeuroConstructor.Core.core.model_converter import ModelConverter
+        # Получаем корневую папку проекта (NeuroConstructor/)
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
         
-        # Получаем корневую папку проекта
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # Путь для Student: NeuroConstructor/models/student/
         student_dir = os.path.join(project_root, "models", "student")
         os.makedirs(student_dir, exist_ok=True)
         
-        # Создаём ModelConverter
-        converter = ModelConverter()
+        logger.info(f"Student dir: {student_dir}")
         
-        # Создаём конфигурацию Student модели с нуля
+        # Создаём конфигурацию Student модели
         student_config = {
             "model_type": "student",
             "architecture": {
@@ -297,6 +297,7 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
         config_path = os.path.join(student_dir, "config.json")
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(student_config, f, indent=2, ensure_ascii=False)
+        logger.info(f"Saved config.json: {config_path}")
         
         # Сохраняем model_info.json
         model_info = {
@@ -310,21 +311,21 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
         info_path = os.path.join(student_dir, "model_info.json")
         with open(info_path, 'w', encoding='utf-8') as f:
             json.dump(model_info, f, indent=2, ensure_ascii=False)
+        logger.info(f"Saved model_info.json: {info_path}")
         
-        # Сохраняем weights.bin (пустой placeholder)
+        # Сохраняем weights.bin (placeholder)
         weights_path = os.path.join(student_dir, "weights.bin")
         with open(weights_path, 'w') as f:
             f.write(f"# Student model template: {request.model_family} {request.hidden_size}h x {request.num_layers}L x {request.num_heads}H")
+        logger.info(f"Saved weights.bin: {weights_path}")
         
-        logger.info(f"Student model created successfully: {student_dir}")
+        logger.info(f"Student model created successfully at: {student_dir}")
         
         return CreateStudentResponse(
             status="created",
             student_model_info=f"Student {request.model_family} created: {request.hidden_size}h x {request.num_layers}L x {request.num_heads}H",
             compression_applied=False,
         )
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Create student from scratch error: {e}", exc_info=True)
         return CreateStudentResponse(status="error", error_message=str(e))
