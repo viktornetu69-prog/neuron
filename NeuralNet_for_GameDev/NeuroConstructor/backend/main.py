@@ -1072,7 +1072,7 @@ class LLMStatusResponse(BaseModel):
     model_type: str = ""  # "teacher" or "student"
     gpu_layers: int = 0
     ollama_available: bool = False
-    backend_status: str = ""
+    backend_status: str = "unknown"
 
 class BenchmarkCompareResponse(BaseModel):
     passed: bool = False
@@ -1120,17 +1120,25 @@ async def get_llm_status():
                         "path": fpath
                     })
         
+        # Get values with safe defaults
+        model_loaded = server_state.get("model_loaded", False)
+        model_path = server_state.get("model_path") or ""
+        model_info = server_state.get("model_info") or {}
+        model_size_gb = model_info.get("model_size_gb", 0)
+        model_type = model_info.get("model_type", "")
+
         return LLMStatusResponse(
             llama_cpp_available=llama_cpp_available,
-            model_loaded=server_state["model_loaded"],
-            model_path=server_state["model_path"],
-            model_size_gb=server_state["model_info"].get("model_size_gb", 0),
-            model_type=server_state["model_info"].get("model_type", ""),
+            model_loaded=model_loaded,
+            model_path=model_path,
+            model_size_gb=model_size_gb,
+            model_type=model_type,
             gpu_layers=0,
             backend_status="ready" if llama_cpp_available else "llama-cpp not installed",
             ollama_available=ollama_available,
         )
     except Exception as e:
+        logger.error(f"LLM status error: {e}", exc_info=True)
         return LLMStatusResponse(
             backend_status=f"error: {str(e)}"
         )
