@@ -3,6 +3,7 @@ import { AppLayout } from './components/AppLayout';
 import { ChatArea } from './components/ChatArea';
 import { ModelsPanel } from './components/ModelsPanel';
 import { DatasetPanel } from './components/DatasetPanel';
+import { BenchmarkPanel } from './components/BenchmarkPanel';
 import { StatusBar } from './components/StatusBar';
 import { PluginManagerPanel } from './components/PluginManager';
 import { PreviewPanel } from './components/PreviewPanel';
@@ -10,7 +11,7 @@ import { checkHealth, sendChat } from '@/api.client';
 import { Plugin } from '@/types';
 import { DatasetAnalysisResult } from '@/types/dataset-panel.types';
 
-type Panel = 'chat' | 'models' | 'datasets' | 'stage6' | 'plugins' | 'settings';
+type Panel = 'chat' | 'models' | 'datasets' | 'benchmark' | 'stage6' | 'plugins' | 'settings';
 
 interface AppState {
   panel: Panel;
@@ -192,6 +193,10 @@ export default function App() {
             <DatasetPanel
               isServerAvailable={state.isServerAvailable}
               onDatasetAnalysisChange={handleDatasetAnalysisChange}
+            />
+          ) : state.panel === 'benchmark' ? (
+            <BenchmarkPanel
+              isServerAvailable={state.isServerAvailable}
             />
           ) : (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8888aa' }}>

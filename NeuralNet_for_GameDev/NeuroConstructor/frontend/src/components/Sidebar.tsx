@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { id: 'chat', icon: '💬', label: 'Чат' },
   { id: 'models', icon: '🧠', label: 'Модели' },
   { id: 'datasets', icon: '📊', label: 'Датасеты' },
+  { id: 'benchmark', icon: '📈', label: 'Benchmark' },
   { id: 'stage6', icon: '⚡', label: 'Stage 6' },
   { id: 'plugins', icon: '🔌', label: 'Плагины' },
 ];

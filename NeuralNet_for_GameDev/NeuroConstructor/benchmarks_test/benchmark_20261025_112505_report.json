@@ -1,0 +1,332 @@
+{
+  "config": {
+    "test_count": 120,
+    "qa_pairs": 3,
+    "chat_dialogs": 2,
+    "code_examples": 2,
+    "creative_tasks": 1,
+    "pass_threshold": 0.85
+  },
+  "total_tests": 8,
+  "passed": 5,
+  "failed": 3,
+  "pass_rate": 0.62,
+  "overall_similarity": 85.35,
+  "teacher_model": "",
+  "student_model": "",
+  "fine_tuning_needed": false,
+  "timestamp": "2026-10-25T11:25:05.138799",
+  "report": {
+    "total_tests": 8,
+    "passed": 5,
+    "failed": 3,
+    "pass_rate": 62.5,
+    "overall_similarity": 85.35,
+    "metrics": {
+      "avg_cosine_char": 83.35,
+      "avg_cosine_word": 80.09,
+      "avg_bleu": 80.78,
+      "avg_rouge_l": 90.95,
+      "avg_token_f1": 90.95
+    },
+    "distribution": {
+      "excellent_95_100": 0,
+      "good_85_95": 5,
+      "mediocre_70_85": 3,
+      "poor_below_70": 0
+    },
+    "exact_matches": 0,
+    "worst_cases": [
+      {
+        "test_id": "chat_005",
+        "question": "Что ты умеешь?",
+        "teacher_answer": "[Teacher] Answer for: Что ты умеешь?",
+        "student_answer": "[Student] Answer for: Что ты умеешь?",
+        "metrics": {
+          "cosine_similarity_char": 0.7647,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.7825,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8241
+      },
+      {
+        "test_id": "qa_001",
+        "question": "Что такое нейросеть?",
+        "teacher_answer": "[Teacher] Answer for: Что такое нейросеть?",
+        "student_answer": "[Student] Answer for: Что такое нейросеть?",
+        "metrics": {
+          "cosine_similarity_char": 0.8,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.7825,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8329
+      },
+      {
+        "test_id": "chat_004",
+        "question": "Привет! Как дела?",
+        "teacher_answer": "[Teacher] Answer for: Привет! Как дела?",
+        "student_answer": "[Student] Answer for: Привет! Как дела?",
+        "metrics": {
+          "cosine_similarity_char": 0.7838,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": false,
+        "overall_score": 0.8406
+      },
+      {
+        "test_id": "qa_003",
+        "question": "Что такое квантификация моделей?",
+        "teacher_answer": "[Teacher] Answer for: Что такое квантификация моделей?",
+        "student_answer": "[Student] Answer for: Что такое квантификация моделей?",
+        "metrics": {
+          "cosine_similarity_char": 0.8462,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": true,
+        "overall_score": 0.8562
+      },
+      {
+        "test_id": "creative_008",
+        "question": "Опиши как работает обучение нейросети",
+        "teacher_answer": "[Teacher] Answer for: Опиши как работает обучение нейросети",
+        "student_answer": "[Student] Answer for: Опиши как работает обучение нейросети",
+        "metrics": {
+          "cosine_similarity_char": 0.8596,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": true,
+        "overall_score": 0.8596
+      },
+      {
+        "test_id": "code_006",
+        "question": "Напиши функцию для нормализации массива",
+        "teacher_answer": "[Teacher] Answer for: Напиши функцию для нормализации массива",
+        "student_answer": "[Student] Answer for: Напиши функцию для нормализации массива",
+        "metrics": {
+          "cosine_similarity_char": 0.8644,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": true,
+        "overall_score": 0.8608
+      },
+      {
+        "test_id": "qa_002",
+        "question": "Как работает обратное распространение ошибки?",
+        "teacher_answer": "[Teacher] Answer for: Как работает обратное распространение ошибки?",
+        "student_answer": "[Student] Answer for: Как работает обратное распространение ошибки?",
+        "metrics": {
+          "cosine_similarity_char": 0.8806,
+          "cosine_similarity_word": 0.8182,
+          "bleu_score": 0.8265,
+          "rouge_l": 0.9167,
+          "exact_match": 0.0,
+          "token_precision": 0.9167,
+          "token_recall": 0.9167,
+          "token_f1": 0.9167
+        },
+        "passed": true,
+        "overall_score": 0.8744
+      },
+      {
+        "test_id": "code_007",
+        "question": "Как посчитать cosine similarity в Python?",
+        "teacher_answer": "[Teacher] Answer for: Как посчитать cosine similarity в Python?",
+        "student_answer": "[Student] Answer for: Как посчитать cosine similarity в Python?",
+        "metrics": {
+          "cosine_similarity_char": 0.8689,
+          "cosine_similarity_word": 0.8333,
+          "bleu_score": 0.8424,
+          "rouge_l": 0.9231,
+          "exact_match": 0.0,
+          "token_precision": 0.9231,
+          "token_recall": 0.9231,
+          "token_f1": 0.9231
+        },
+        "passed": true,
+        "overall_score": 0.8795
+      }
+    ],
+    "individual_results": [
+      {
+        "test_id": "qa_001",
+        "question": "Что такое нейросеть?",
+        "teacher_answer": "[Teacher] Answer for: Что такое нейросеть?",
+        "student_answer": "[Student] Answer for: Что такое нейросеть?",
+        "metrics": {
+          "cosine_similarity_char": 0.8,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.7825,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8329
+      },
+      {
+        "test_id": "qa_002",
+        "question": "Как работает обратное распространение ошибки?",
+        "teacher_answer": "[Teacher] Answer for: Как работает обратное распространение ошибки?",
+        "student_answer": "[Student] Answer for: Как работает обратное распространение ошибки?",
+        "metrics": {
+          "cosine_similarity_char": 0.8806,
+          "cosine_similarity_word": 0.8182,
+          "bleu_score": 0.8265,
+          "rouge_l": 0.9167,
+          "exact_match": 0.0,
+          "token_precision": 0.9167,
+          "token_recall": 0.9167,
+          "token_f1": 0.9167
+        },
+        "passed": true,
+        "overall_score": 0.8744
+      },
+      {
+        "test_id": "qa_003",
+        "question": "Что такое квантификация моделей?",
+        "teacher_answer": "[Teacher] Answer for: Что такое квантификация моделей?",
+        "student_answer": "[Student] Answer for: Что такое квантификация моделей?",
+        "metrics": {
+          "cosine_similarity_char": 0.8462,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": true,
+        "overall_score": 0.8562
+      },
+      {
+        "test_id": "chat_004",
+        "question": "Привет! Как дела?",
+        "teacher_answer": "[Teacher] Answer for: Привет! Как дела?",
+        "student_answer": "[Student] Answer for: Привет! Как дела?",
+        "metrics": {
+          "cosine_similarity_char": 0.7838,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": false,
+        "overall_score": 0.8406
+      },
+      {
+        "test_id": "chat_005",
+        "question": "Что ты умеешь?",
+        "teacher_answer": "[Teacher] Answer for: Что ты умеешь?",
+        "student_answer": "[Student] Answer for: Что ты умеешь?",
+        "metrics": {
+          "cosine_similarity_char": 0.7647,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.7825,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8241
+      },
+      {
+        "test_id": "code_006",
+        "question": "Напиши функцию для нормализации массива",
+        "teacher_answer": "[Teacher] Answer for: Напиши функцию для нормализации массива",
+        "student_answer": "[Student] Answer for: Напиши функцию для нормализации массива",
+        "metrics": {
+          "cosine_similarity_char": 0.8644,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": true,
+        "overall_score": 0.8608
+      },
+      {
+        "test_id": "code_007",
+        "question": "Как посчитать cosine similarity в Python?",
+        "teacher_answer": "[Teacher] Answer for: Как посчитать cosine similarity в Python?",
+        "student_answer": "[Student] Answer for: Как посчитать cosine similarity в Python?",
+        "metrics": {
+          "cosine_similarity_char": 0.8689,
+          "cosine_similarity_word": 0.8333,
+          "bleu_score": 0.8424,
+          "rouge_l": 0.9231,
+          "exact_match": 0.0,
+          "token_precision": 0.9231,
+          "token_recall": 0.9231,
+          "token_f1": 0.9231
+        },
+        "passed": true,
+        "overall_score": 0.8795
+      },
+      {
+        "test_id": "creative_008",
+        "question": "Опиши как работает обучение нейросети",
+        "teacher_answer": "[Teacher] Answer for: Опиши как работает обучение нейросети",
+        "student_answer": "[Student] Answer for: Опиши как работает обучение нейросети",
+        "metrics": {
+          "cosine_similarity_char": 0.8596,
+          "cosine_similarity_word": 0.8,
+          "bleu_score": 0.8071,
+          "rouge_l": 0.9091,
+          "exact_match": 0.0,
+          "token_precision": 0.9091,
+          "token_recall": 0.9091,
+          "token_f1": 0.9091
+        },
+        "passed": true,
+        "overall_score": 0.8596
+      }
+    ]
+  }
+}
