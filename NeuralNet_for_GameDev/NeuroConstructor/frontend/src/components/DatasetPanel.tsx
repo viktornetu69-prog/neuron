@@ -15,6 +15,7 @@ import { DatasetAnalysisResult } from '@/types/dataset-panel.types';
 import { useDatasetManager } from './dataset-state';
 import { DatasetListPanel } from './DatasetListPanel';
 import { DatasetDetailsPanel } from './DatasetDetailsPanel';
+import { DatasetViewer } from './DatasetViewer';
 
 interface DatasetPanelProps {
   isServerAvailable: boolean;
@@ -41,6 +42,8 @@ export const DatasetPanel: React.FC<DatasetPanelProps> = ({
     isUploading,
     uploadProgress,
   } = datasetState;
+
+  const [showViewer, setShowViewer] = useState(false);
 
   const {
     loadDatasets,
@@ -85,6 +88,15 @@ export const DatasetPanel: React.FC<DatasetPanelProps> = ({
     loadDatasets();
   }, [loadDatasets]);
 
+  const handleViewData = useCallback(() => {
+    if (!selectedDataset) return;
+    setShowViewer(true);
+  }, [selectedDataset]);
+
+  const handleCloseViewer = useCallback(() => {
+    setShowViewer(false);
+  }, []);
+
   return (
     <div style={styles.container}>
       {/* Header Bar */}
@@ -125,6 +137,21 @@ export const DatasetPanel: React.FC<DatasetPanelProps> = ({
             title={selectedDataset ? 'Проанализировать датасет' : 'Выберите датасет'}
           >
             🔍 Анализ
+          </button>
+
+          {/* View Data */}
+          <button
+            onClick={handleViewData}
+            disabled={!selectedDataset || !isServerAvailable || loading}
+            style={{
+              ...styles.actionButton,
+              background: (selectedDataset && isServerAvailable) ? '#1a7c6f' : '#1a1a2e',
+              color: (selectedDataset && isServerAvailable) ? 'white' : '#666688',
+              cursor: (selectedDataset && isServerAvailable) ? 'pointer' : 'not-allowed',
+            }}
+            title={selectedDataset ? 'Просмотреть данные' : 'Выберите датасет'}
+          >
+            👁 Данные
           </button>
 
           {/* Upload */}
@@ -197,9 +224,15 @@ export const DatasetPanel: React.FC<DatasetPanelProps> = ({
               />
             </div>
 
-            {/* Main Panel: Dataset Details */}
+            {/* Main Panel: Dataset Details or Viewer */}
             <div style={styles.mainPanel}>
-              {selectedDataset ? (
+              {showViewer && selectedDataset ? (
+                <DatasetViewer
+                  datasetId={selectedDataset.id}
+                  isServerAvailable={isServerAvailable}
+                  onClose={handleCloseViewer}
+                />
+              ) : selectedDataset ? (
                 <DatasetDetailsPanel
                   dataset={selectedDataset}
                   onAnalyze={handleAnalyze}

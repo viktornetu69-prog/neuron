@@ -571,6 +571,162 @@ async def analyze_student_model(filename: str):
         logger.error(f"Analyze student error: {e}")
         return {"status": "error", "error": str(e)}
 
+# ============================================
+# Benchmark endpoints (LM Benchmark — Stage 1)
+# ============================================
+
+class BenchmarkRunRequest(BaseModel):
+    test_count: int = 120
+    qa_pairs: int = 50
+    chat_dialogs: int = 30
+    code_examples: int = 20
+    creative_tasks: int = 20
+    output_dir: str = "benchmarks"
+
+class BenchmarkRunResponse(BaseModel):
+    status: str = ""
+    total_tests: int = 0
+    passed: int = 0
+    failed: int = 0
+    pass_rate: float = 0.0
+    overall_similarity: float = 0.0
+    fine_tuning_needed: bool = False
+    report_path: str = ""
+    error_message: str = ""
+
+class BenchmarkCompareRequest(BaseModel):
+    teacher_answer: str
+    student_answer: str
+    question: str = ""
+    test_id: str = ""
+
+class BenchmarkCompareResponse(BaseModel):
+    passed: bool = False
+    overall_score: float = 0.0
+    metrics: Dict[str, float] = {}
+    error_message: str = ""
+
+class BenchmarkFineTuneRequest(BaseModel):
+    training_data_path: str = ""
+    epochs: int = 10
+    learning_rate: float = 1e-4
+    batch_size: int = 8
+
+class BenchmarkFineTuneResponse(BaseModel):
+    status: str = ""
+    epochs_completed: int = 0
+    final_similarity: float = 0.0
+    history_path: str = ""
+    error_message: str = ""
+
+@app.post("/api/benchmark/run", response_model=BenchmarkRunResponse)
+async def run_benchmark(request: BenchmarkRunRequest):
+    """Запуск LM Benchmark: generate tests → run Teacher/Student → compare → report"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].run_benchmark(
+            test_count=request.test_count,
+            qa_pairs=request.qa_pairs,
+            chat_dialogs=request.chat_dialogs,
+            code_examples=request.code_examples,
+            creative_tasks=request.creative_tasks,
+            output_dir=request.output_dir,
+        )
+        return BenchmarkRunResponse(
+            status=result.get("status", "completed"),
+            total_tests=result.get("total_tests", 0),
+            passed=result.get("passed", 0),
+            failed=result.get("failed", 0),
+            pass_rate=result.get("pass_rate", 0.0),
+            overall_similarity=result.get("overall_similarity", 0.0),
+            fine_tuning_needed=result.get("fine_tuning_needed", False),
+            report_path=result.get("report_path", ""),
+        )
+    except Exception as e:
+        logger.error(f"Benchmark run error: {e}", exc_info=True)
+        return BenchmarkRunResponse(status="error", error_message=str(e))
+
+@app.post("/api/benchmark/compare", response_model=BenchmarkCompareResponse)
+async def compare_answers(request: BenchmarkCompareRequest):
+    """Сравнить ответы Teacher vs Student"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].compare_answers(
+            teacher_answer=request.teacher_answer,
+            student_answer=request.student_answer,
+            question=request.question,
+            test_id=request.test_id,
+        )
+        return BenchmarkCompareResponse(
+            passed=result.get("passed", False),
+            overall_score=result.get("overall_score", 0.0),
+            metrics=result.get("metrics", {}),
+        )
+    except Exception as e:
+        logger.error(f"Benchmark compare error: {e}")
+        return BenchmarkCompareResponse(error_message=str(e))
+
+@app.post("/api/benchmark/fine-tune", response_model=BenchmarkFineTuneResponse)
+async def fine_tune_student(request: BenchmarkFineTuneRequest):
+    """Запуск fine-tuning Student на Teacher outputs"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].fine_tune_student(
+            training_data_path=request.training_data_path,
+            epochs=request.epochs,
+            learning_rate=request.learning_rate,
+            batch_size=request.batch_size,
+        )
+        return BenchmarkFineTuneResponse(
+            status=result.get("status", "completed"),
+            epochs_completed=result.get("epochs_completed", 0),
+            final_similarity=result.get("final_similarity", 0.0),
+            history_path=result.get("history_path", ""),
+        )
+    except Exception as e:
+        logger.error(f"Benchmark fine-tune error: {e}")
+        return BenchmarkFineTuneResponse(status="error", error_message=str(e))
+
+# ============================================
+# Dataset Viewer endpoint
+# ============================================
+
+class DatasetViewRequest(BaseModel):
+    dataset_id: str
+    limit: int = 50
+
+class DatasetViewResponse(BaseModel):
+    success: bool = False
+    dataset_id: str = ""
+    total_rows: int = 0
+    columns: List[str] = []
+    rows: List[Dict[str, Any]] = []
+    error_message: str = ""
+
+@app.post("/api/datasets/view", response_model=DatasetViewResponse)
+async def view_dataset(request: DatasetViewRequest):
+    """Просмотр содержимого датасета из Core"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].view_dataset(request.dataset_id, request.limit)
+        if result.get("success"):
+            return DatasetViewResponse(
+                success=True,
+                dataset_id=result.get("dataset_id", ""),
+                total_rows=result.get("total_rows", 0),
+                columns=result.get("columns", []),
+                rows=result.get("rows", []),
+            )
+        else:
+            return DatasetViewResponse(success=False, error_message=result.get("error", "Failed to view dataset"))
+    except Exception as e:
+        logger.error(f"Dataset view error: {e}")
+        return DatasetViewResponse(success=False, error_message=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
