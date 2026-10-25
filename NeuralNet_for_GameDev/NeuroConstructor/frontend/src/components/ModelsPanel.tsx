@@ -24,12 +24,15 @@ import { convertTeacherToStudent, createStudentFromScratchAPI } from './files-ma
 // ============================================================================
 
 const DEFAULT_STUDENT_ARCH: StudentArchitecture = {
-  model_family: 'bert',
+  model_family: 'qwen3',
   hidden_size: 768,
   num_layers: 12,
   num_heads: 12,
-  vocab_size: 30522,
-  max_position_embeddings: 512,
+  num_kv_heads: 12,
+  vocab_size: 32000,
+  max_position_embeddings: 2048,
+  rope_theta: 10000,
+  head_dim: 64,
 };
 
 // ============================================================================
@@ -488,6 +491,7 @@ export function ModelsPanel({
       {showCreateStudentDialog && (
         <StudentCreateDialog
           studentArch={studentArch}
+          teacherArch={teacherAnalysis?.architecture}
           loading={loading}
           onArchChange={handleStudentArchChange}
           onCreate={handleCreateStudent}
