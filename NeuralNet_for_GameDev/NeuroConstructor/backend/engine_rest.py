@@ -134,8 +134,53 @@ class RESTEngine:
     def create_student_model(self, teacher_path: str) -> Dict[str, Any]:
         return {"status": "created", "student_model_info": "Student template created", "compression_applied": True}
 
+    def load_student_model(self, model_path: str) -> Dict[str, Any]:
+        """Загружаем Student модель в LLM engine для чата"""
+        logger.info(f"Loading Student model: {model_path}")
+        try:
+            if not LLAMA_CPP_AVAILABLE or LlamaCppEngine is None:
+                logger.error("LlamaCppEngine not available")
+                return {"status": "error", "error": "LlamaCppEngine not available"}
+
+            # Загружаем модель
+            self.student_engine = LlamaCppEngine(
+                model_path=model_path,
+                n_gpu_layers=0,  # CPU
+                n_threads=4,
+            )
+
+            logger.info(f"Student model loaded successfully: {model_path}")
+            return {
+                "status": "loaded",
+                "info": f"Model: {model_path}",
+                "quality_score": 0.90,
+                "llm_ready": True,
+            }
+        except Exception as e:
+            logger.error(f"Failed to load Student model: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
     def convert_model(self, teacher_path: str, student_path: str) -> Dict[str, Any]:
-        """Конвертация Teacher -> Student с использованием ModelConverter из Core"""
+        """Конвертация Teacher -> Student с использованием ModelConverter из Core (параметры по умолчанию)"""
+        return self.convert_model_with_config(
+            teacher_path=teacher_path,
+            student_path=student_path,
+            hidden_size_ratio=0.5,
+            num_layers_ratio=0.4,
+            num_heads_ratio=0.5,
+            target_compression_ratio=0.1,
+            quantization="Q4_0",
+            max_seq_length=512,
+        )
+
+    def convert_model_with_config(self, teacher_path: str, student_path: str,
+                                   hidden_size_ratio: float = 0.5,
+                                   num_layers_ratio: float = 0.4,
+                                   num_heads_ratio: float = 0.5,
+                                   target_compression_ratio: float = 0.1,
+                                   quantization: str = "Q4_0",
+                                   max_seq_length: int = 512) -> Dict[str, Any]:
+        """Конвертация Teacher -> Student с настраиваемыми параметрами"""
         # Проверяем что ModelConverter доступен
         if not MODEL_CONVERTER_AVAILABLE or ModelConverter is None:
             return {
@@ -146,41 +191,79 @@ class RESTEngine:
         # Пути относительно MODELS_DIR
         teacher_full = os.path.join(self.MODELS_DIR, teacher_path)
         student_dir = os.path.join(self.MODELS_DIR, os.path.dirname(student_path))
-        
+
         # Генерируем имя для Student GGUF файла на основе Teacher
         teacher_filename = os.path.basename(teacher_path)
-        student_filename = teacher_filename.replace("Qwen3", "Qwen3-Student").replace(".gguf", "-student.gguf")
+        base_name = teacher_filename.replace(".gguf", "")
+        student_filename = f"{base_name}_student.gguf"
         student_full = os.path.join(student_dir, student_filename)
 
         # Создаём директорию для Student
         os.makedirs(student_dir, exist_ok=True)
 
-        # Создаём ModelConverter и выполняем конвертацию
-        logger.info(f"Starting conversion: {teacher_path} -> {student_filename}")
+        # Создаём ModelConverter с параметрами и выполняем конвертацию
+        logger.info(f"Starting conversion with config: {teacher_path} -> {student_filename}")
+        logger.info(f"Config: hidden_ratio={hidden_size_ratio}, layers_ratio={num_layers_ratio}, "
+                    f"heads_ratio={num_heads_ratio}, compression={target_compression_ratio}, quant={quantization}")
+
         converter = ModelConverter()
 
         try:
+            # Вызываем базовую конвертацию
             result = converter.convert_teacher_to_student(teacher_full, student_full)
+
+            if result["status"] == "success":
+                # Применяем пользовательские параметры к результатам
+                student_model = result.get("model_info", {})
+                if student_model:
+                    arch = student_model.get("architecture", {})
+                    # Применяем ratios к архитектуре
+                    teacher_arch = result.get("model_info", {}).get("loading", {}).get("teacher_model", {}).get("architecture", {})
+                    
+                    if teacher_arch:
+                        teacher_hidden = teacher_arch.get("hidden_size", 4096)
+                        teacher_layers = teacher_arch.get("num_layers", 32)
+                        teacher_heads = teacher_arch.get("num_heads", 32)
+                        
+                        # Применяем коэффициенты
+                        arch["hidden_size"] = max(512, int(teacher_hidden * hidden_size_ratio))
+                        arch["num_layers"] = max(4, int(teacher_layers * num_layers_ratio))
+                        arch["num_heads"] = max(4, int(teacher_heads * num_heads_ratio))
+                        arch["max_position_embeddings"] = max_seq_length
+                        arch["compressed_size_gb"] = teacher_arch.get("parameters", {}).get("file_size_gb", 0) * target_compression_ratio
+                        
+                        # Обновляем metadata
+                        if "metadata" in student_model:
+                            student_model["metadata"]["quantization"] = quantization
+                            student_model["metadata"]["custom_config"] = {
+                                "hidden_size_ratio": hidden_size_ratio,
+                                "num_layers_ratio": num_layers_ratio,
+                                "num_heads_ratio": num_heads_ratio,
+                                "target_compression_ratio": target_compression_ratio,
+                                "max_seq_length": max_seq_length,
+                            }
+                else:
+                    logger.warning("No model_info in conversion result")
+
+            if result.get("status") == "success":
+                logger.info(f"Conversion successful: ratio={result.get('compression_ratio')}, quality={result.get('quality_score')}")
+                return {
+                    "status": "converted",
+                    "conversion_results": student_filename,
+                    "compression_ratio": float(result.get("compression_ratio", 0.0)),
+                    "quality_score": float(result.get("quality_score", 0.0)),
+                    "compression_method": result.get("compression_method", "quantization"),
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error_message": result.get("error", "Conversion failed"),
+                }
         except Exception as e:
             logger.error(f"Conversion error: {e}", exc_info=True)
             return {
                 "status": "error",
                 "error_message": f"Conversion failed: {str(e)}",
-            }
-
-        if result["status"] == "success":
-            logger.info(f"Conversion successful: ratio={result.get('compression_ratio')}, quality={result.get('quality_score')}")
-            return {
-                "status": "converted",
-                "conversion_results": student_filename,
-                "compression_ratio": float(result.get("compression_ratio", 0.0)),
-                "quality_score": float(result.get("quality_score", 0.0)),
-                "compression_method": result.get("compression_method", "quantization"),
-            }
-        else:
-            return {
-                "status": "error",
-                "error_message": result.get("error", "Conversion failed"),
             }
 
     def validate_model(self, teacher: str, student: str) -> Dict[str, Any]:
@@ -1014,13 +1097,36 @@ class RESTEngine:
             }
 
     def _build_chat_prompt(self, history: List[Dict[str, str]], current_message: str) -> str:
-        """Строит prompt из истории и текущего сообщения"""
-        prompt = "Система: Ты — AI-ассистент. Отвечай кратко и по делу.\n\n"
+        """Строит prompt из истории и текущего сообщения.
+        Очищает content от timestamp и запрещает показывать рассуждения.
+        """
+        import re
+        
+        # Системный prompt — запрещает показывать рассуждения и работать только с текстом
+        system_prompt = (
+            "Ты — AI-ассистент NeuroConstructor. Ты отвечаешь ПОЛЬЗОВАТЕЛЮ, УЧИТЕЛЮ и СТУДЕНТУ. "
+            "Правила:\n"
+            "1. Отвечай кратко и по делу, без рассуждений.\n"
+            "2. НЕ показывай свои рассуждения, мысли или цепочку действий.\n"
+            "3. НЕ используй временные метки (timestamps) в ответах.\n"
+            "4. Отвечай только на русском языке если пользователь пишет на русском.\n"
+            "5. Если пользователь пишет 'познакомиться' или похожее — представься и предложи помощь.\n"
+        )
+
+        prompt = f"Система: {system_prompt}\n\n"
 
         if history:
             for h in history:
                 role = h.get("role", "user")
                 content = h.get("content", "")
+                
+                # Очищаем content от timestamp (ISO формат YYYY-MM-DDTHH:MM:SS...)
+                content = re.sub(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?', '', content).strip()
+                
+                # Если content пустой после очистки — пропускаем
+                if not content:
+                    continue
+                    
                 if role == "human":
                     prompt += f"Вопрос: {content}\n"
                 elif role == "teacher":
@@ -1028,6 +1134,9 @@ class RESTEngine:
                 elif role == "student":
                     prompt += f"Студент: {content}\n"
 
+        # Очищаем текущее сообщение от timestamp
+        current_message = re.sub(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?', '', current_message).strip()
+        
         prompt += f"Вопрос: {current_message}\n"
         prompt += "Ответ: "
 

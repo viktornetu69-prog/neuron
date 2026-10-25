@@ -98,6 +98,23 @@ export async function convertModel(teacherPath: string, studentPath: string) {
   return response.data;
 }
 
+export interface ConvertConfig {
+  teacher_path: string;
+  student_path: string;
+  hidden_size_ratio: number;
+  num_layers_ratio: number;
+  num_heads_ratio: number;
+  target_compression_ratio: number;
+  quantization: string;
+  max_seq_length: number;
+}
+
+export async function convertModelWithConfig(config: ConvertConfig) {
+  const api = getApi();
+  const response = await api.post('/api/models/convert-with-config', config);
+  return response.data;
+}
+
 export async function createStudentFromScratch(architecture?: any) {
   const api = getApi();
   const response = await api.post('/api/models/student/scratch', {
@@ -144,7 +161,7 @@ export async function analyzeStudentModel(filename: string) {
 export async function sendChatToMode(
   mode: string,
   message: string,
-  history: Array<{ role: string; content: string; timestamp: string }> = []
+  history: Array<{ role: string; content: string }> = []
 ) {
   const api = getApi();
   const response = await api.post('/api/chat/mode', {

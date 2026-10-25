@@ -111,10 +111,10 @@ export default function App() {
       const mode = state.chatMode;
 
       // Формируем историю для отправки на бэкенд
-      const apiHistory: Array<{ role: string; content: string; timestamp: string }> = state.messages.map(m => ({
+      // Отправляем только role и content — timestamp не нужен (бэкенд его не использует)
+      const apiHistory: Array<{ role: string; content: string }> = state.messages.map(m => ({
         role: m.role,
         content: m.content,
-        timestamp: m.timestamp,
       }));
 
       if (mode === 'human-teacher') {

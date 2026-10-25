@@ -431,6 +431,189 @@ function TeacherTab({ settings, setSettings }: { settings: AppSettings; setSetti
           />
         </SettingRow>
       </Section>
+      <Section title="Конвертация в Student" icon="🔄">
+        <SettingRow label="Семья моделей" description="Архитектура Student модели">
+          <select
+            value={settings.studentModelFamily}
+            onChange={(e) => setSettings(prev => ({ ...prev, studentModelFamily: e.target.value }))}
+            style={{
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#e8e8e8',
+              fontSize: 13,
+            }}
+          >
+            <option value="qwen3">Qwen3</option>
+            <option value="llama">Llama</option>
+            <option value="mistral">Mistral</option>
+          </select>
+        </SettingRow>
+        <SettingRow label="Hidden Size" description="Размер скрытого представления модели">
+          <input
+            type="number"
+            value={settings.studentHiddenSize}
+            onChange={(e) => setSettings(prev => ({ ...prev, studentHiddenSize: parseInt(e.target.value) || 768 }))}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#e8e8e8',
+              fontSize: 13,
+            }}
+          />
+        </SettingRow>
+        <SettingRow label="Слои" description="Количество слоёв трансформера">
+          <input
+            type="number"
+            value={settings.studentNumLayers}
+            onChange={(e) => setSettings(prev => ({ ...prev, studentNumLayers: parseInt(e.target.value) || 12 }))}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#e8e8e8',
+              fontSize: 13,
+            }}
+          />
+        </SettingRow>
+        <SettingRow label="Головки внимания" description="Количество attention head">
+          <input
+            type="number"
+            value={settings.studentNumHeads}
+            onChange={(e) => setSettings(prev => ({ ...prev, studentNumHeads: parseInt(e.target.value) || 12 }))}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#e8e8e8',
+              fontSize: 13,
+            }}
+          />
+        </SettingRow>
+        <SettingRow label="KV головки" description="KV heads для GQA">
+          <input
+            type="number"
+            value={12}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#8888aa',
+              fontSize: 13,
+            }}
+            disabled
+          />
+        </SettingRow>
+        <SettingRow label="Размер головки" description="Head dim">
+          <input
+            type="number"
+            value={128}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#8888aa',
+              fontSize: 13,
+            }}
+            disabled
+          />
+        </SettingRow>
+        <SettingRow label="Max position embeddings" description="Максимальная длина контекста">
+          <input
+            type="number"
+            value={2048}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#8888aa',
+              fontSize: 13,
+            }}
+            disabled
+          />
+        </SettingRow>
+        <SettingRow label="RoPE theta" description="Базовая частота для Rope Positional Embeddings">
+          <input
+            type="number"
+            value={10000}
+            style={{
+              width: 100,
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#8888aa',
+              fontSize: 13,
+            }}
+            disabled
+          />
+        </SettingRow>
+        <SettingRow label="Квантификация" description="Метод квантования весов">
+          <select
+            value={settings.studentQuantization}
+            onChange={(e) => setSettings(prev => ({ ...prev, studentQuantization: e.target.value }))}
+            style={{
+              padding: '8px 12px',
+              background: '#121220',
+              border: '1px solid #1e1e30',
+              borderRadius: 6,
+              color: '#e8e8e8',
+              fontSize: 13,
+            }}
+          >
+            <option value="Q4_0">Q4_0 — 4-бит (рекомендуется)</option>
+            <option value="Q5_0">Q5_0 — 5-бит</option>
+            <option value="Q6_0">Q6_0 — 6-бит</option>
+            <option value="Q8_0">Q8_0 — 8-бит (макс. качество)</option>
+          </select>
+        </SettingRow>
+        <SettingRow label="Целевое сжатие" description="Коэффициент сжатия модели (0.01-0.5)">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 200 }}>
+            <input
+              type="range"
+              min="1"
+              max="50"
+              value={10}
+              onChange={(e) => {}}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: 13, color: '#e8e8e8', minWidth: 30 }}>10%</span>
+          </div>
+        </SettingRow>
+        <SettingRow label="Порог качества" description="Минимальный скор для прохождения (0.0-1.0)">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 200 }}>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={85}
+              onChange={(e) => {}}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: 13, color: '#e8e8e8', minWidth: 30 }}>0.85</span>
+          </div>
+        </SettingRow>
+        <SettingRow label="Авто fine-tuning" description="Запуск fine-tuning при низком качестве конвертации">
+          <Toggle
+            value={settings.benchmarkFineTuningTrigger}
+            onChange={(val) => setSettings(prev => ({ ...prev, benchmarkFineTuningTrigger: val }))}
+          />
+        </SettingRow>
+      </Section>
       <button
         onClick={handleSave}
         style={{
@@ -927,7 +1110,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
   // Poll status with progress tracking
   const waitForModelLoaded = async (modelType: 'teacher' | 'student') => {
     let attempts = 0;
-    const maxAttempts = 30; // 30 секунд максимум
+    const maxAttempts = 60; // 60 секунд максимум
 
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -938,10 +1121,14 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
         const res = await fetch(`${apiUrl}/api/llm/status`);
         const data = await res.json();
 
-        // Check if the correct model is loaded
-        if (data.model_loaded && data.model_type === modelType) {
+        // Check if the correct model is loaded using new fields
+        const isModelLoaded = modelType === 'teacher' 
+          ? data.teacher_loaded 
+          : data.student_loaded;
+
+        if (isModelLoaded) {
           setEngineStatus(data);
-          setLoadProgress({ active: false, progress: 100, message: '✅ Модель успешно загружена!', model: null });
+          setLoadProgress({ active: false, progress: 100, message: `✅ Модель ${modelType === 'teacher' ? 'Teacher' : 'Student'} успешно загружена!`, model: null });
           return true;
         }
 
@@ -950,7 +1137,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
         setLoadProgress(prev => ({
           ...prev,
           progress,
-          message: `Загрузка... (${Math.floor(progress)}%)`,
+          message: `Загрузка ${modelType === 'teacher' ? 'Teacher' : 'Student'}... (${Math.floor(progress)}%)`,
         }));
       } catch (err) {
         console.error('Status check error:', err);
@@ -958,7 +1145,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
     }
 
     // Timeout - return false
-    setLoadProgress({ active: false, progress: 0, message: '❌ Превышено время ожидания. Попробуйте ещё раз.', model: null });
+    setLoadProgress({ active: false, progress: 0, message: `❌ Превышено время ожидания. Попробуйте ещё раз.`, model: null });
     return false;
   };
 
@@ -1047,7 +1234,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
         setLoadProgress(prev => ({ ...prev, progress: 50, message: 'Загрузка модели в память...' }));
         const success = await waitForModelLoaded('student');
         if (!success) {
-          alert('Не удалось загрузить Student. Проверьте наличие модели в папке models/student/');
+          alert('Не удалось загрузить Student. Проверьте наличие модели в папке NeuroConstructor.Core/models/student/');
         }
       } else {
         setLoadProgress({ active: false, progress: 0, message: '❌ ' + (data.error || 'Ошибка загрузки Student'), model: null });
@@ -1244,15 +1431,16 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                     <ModelStatusRow
                       label="Teacher"
                       icon="📦"
-                      loaded={engineStatus.model_type === 'teacher' && engineStatus.model_loaded}
-                      path={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
+                      loaded={(engineStatus as any).teacher_loaded || (engineStatus && engineStatus.model_type === 'teacher' && engineStatus.model_loaded)}
+                      path={(engineStatus as any).teacher_loaded ? (engineStatus as any).teacher_path : undefined}
+                      modelId={(engineStatus as any).teacher_model_id || undefined}
                     />
                     <button
-                      onClick={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? handleUnloadTeacher : handleLoadTeacher}
+                      onClick={(engineStatus as any).teacher_loaded || (engineStatus && engineStatus.model_type === 'teacher' && engineStatus.model_loaded) ? handleUnloadTeacher : handleLoadTeacher}
                       disabled={loadingModel !== null || loadProgress.active}
                       style={{
                         padding: '8px 16px',
-                        background: engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '#f44336' : '#7c6ff7',
+                        background: (engineStatus as any).teacher_loaded || (engineStatus && engineStatus.model_type === 'teacher' && engineStatus.model_loaded) ? '#f44336' : '#7c6ff7',
                         border: 'none',
                         borderRadius: 6,
                         color: 'white',
@@ -1263,22 +1451,23 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                         opacity: loadingModel !== null || loadProgress.active ? 0.5 : 1,
                       }}
                     >
-                      {loadingModel === 'teacher' ? '⏳...' : (engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '📤 Выгрузить' : '📥 Загрузить')}
+                      {loadingModel === 'teacher' ? '⏳...' : ((engineStatus as any).teacher_loaded || (engineStatus && engineStatus.model_type === 'teacher' && engineStatus.model_loaded) ? '📤 Выгрузить' : '📥 Загрузить')}
                     </button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <ModelStatusRow
                       label="Student"
                       icon="🎓"
-                      loaded={engineStatus.model_type === 'student' && engineStatus.model_loaded}
-                      path={engineStatus.model_type === 'student' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
+                      loaded={(engineStatus as any).student_loaded || (engineStatus && engineStatus.model_type === 'student' && engineStatus.model_loaded)}
+                      path={(engineStatus as any).student_loaded ? (engineStatus as any).student_path : undefined}
+                      modelId={(engineStatus as any).student_model_id || undefined}
                     />
                     <button
-                      onClick={engineStatus.model_type === 'student' && engineStatus.model_loaded ? handleUnloadStudent : handleLoadStudent}
+                      onClick={(engineStatus as any).student_loaded || (engineStatus && engineStatus.model_type === 'student' && engineStatus.model_loaded) ? handleUnloadStudent : handleLoadStudent}
                       disabled={loadingModel !== null || loadProgress.active}
                       style={{
                         padding: '8px 16px',
-                        background: engineStatus.model_type === 'student' && engineStatus.model_loaded ? '#f44336' : '#7c6ff7',
+                        background: (engineStatus as any).student_loaded || (engineStatus && engineStatus.model_type === 'student' && engineStatus.model_loaded) ? '#f44336' : '#7c6ff7',
                         border: 'none',
                         borderRadius: 6,
                         color: 'white',
@@ -1289,7 +1478,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                         opacity: loadingModel !== null || loadProgress.active ? 0.5 : 1,
                       }}
                     >
-                      {loadingModel === 'student' ? '⏳...' : (engineStatus.model_type === 'student' && engineStatus.model_loaded ? '📤 Выгрузить' : '📥 Загрузить')}
+                      {loadingModel === 'student' ? '⏳...' : ((engineStatus as any).student_loaded || (engineStatus && engineStatus.model_type === 'student' && engineStatus.model_loaded) ? '📤 Выгрузить' : '📥 Загрузить')}
                     </button>
                   </div>
                 </div>
@@ -1299,17 +1488,42 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
               </div>
 
               {/* Model Info */}
-              {engineStatus.model_loaded && (
+              {engineStatus && (engineStatus as any).teacher_loaded && (
                 <div style={{
                   marginTop: 12,
                   padding: 10,
-                  background: 'rgba(124, 111, 247, 0.1)',
-                  borderLeft: '3px solid #7c6ff7',
+                  background: 'rgba(76, 175, 80, 0.1)',
+                  borderLeft: '3px solid #4caf50',
                   borderRadius: '0 6px 6px 0',
                   fontSize: 12,
                   color: '#8888aa',
                 }}>
-                  <div style={{ color: '#e8e8e8', marginBottom: 4 }}>Текущая модель: {engineStatus.model_path}</div>
+                  <div style={{ color: '#e8e8e8', marginBottom: 4 }}>
+                    Teacher: {(engineStatus as any).teacher_path.split('\\').pop() || (engineStatus as any).teacher_path}
+                  </div>
+                  <div style={{ marginBottom: 2 }}>
+                    <span style={{ color: '#8888aa' }}>ID:</span> <span style={{ color: '#4caf50', fontFamily: 'monospace' }}>{(engineStatus as any).teacher_model_id || 'N/A'}</span>
+                  </div>
+                  <div>GPU layers: {engineStatus.gpu_layers || 0} | Size: {engineStatus.model_size_gb || 0} GB</div>
+                </div>
+              )}
+              {engineStatus && (engineStatus as any).student_loaded && (
+                <div style={{
+                  marginTop: 12,
+                  padding: 10,
+                  background: 'rgba(255, 152, 0, 0.1)',
+                  borderLeft: '3px solid #ff9800',
+                  borderRadius: '0 6px 6px 0',
+                  fontSize: 12,
+                  color: '#8888aa',
+                }}>
+                  <div style={{ color: '#e8e8e8', marginBottom: 4 }}>
+                    Student: {(engineStatus as any).student_path.split('\\').pop() || (engineStatus as any).student_path}
+                  </div>
+                  <div style={{ marginBottom: 2 }}>
+                    <span style={{ color: '#8888aa' }}>ID:</span> <span style={{ color: '#ff9800', fontFamily: 'monospace' }}>{(engineStatus as any).student_model_id || 'N/A'}</span>
+                  </div>
+                  <div style={{ color: '#ff9800', marginBottom: 4 }}>⚠️ Student — копия Teacher (metadata only, без дистилляции весов)</div>
                   <div>GPU layers: {engineStatus.gpu_layers || 0} | Size: {engineStatus.model_size_gb || 0} GB</div>
                 </div>
               )}
@@ -1358,7 +1572,7 @@ function StatusBadge({ label, value, color }: { label: string; value: string; co
   );
 }
 
-function ModelStatusRow({ label, icon, loaded, path }: { label: string; icon: string; loaded: boolean; path?: string }) {
+function ModelStatusRow({ label, icon, loaded, path, modelId }: { label: string; icon: string; loaded: boolean; path?: string; modelId?: string }) {
   return (
     <div style={{
       display: 'flex',
@@ -1373,6 +1587,7 @@ function ModelStatusRow({ label, icon, loaded, path }: { label: string; icon: st
         <span>{icon}</span>
         <span style={{ fontSize: 13, fontWeight: 500, color: loaded ? '#4caf50' : '#8888aa' }}>{label}</span>
         {loaded && path && <span style={{ fontSize: 11, color: '#8888aa' }}>→ {path.split('\\').pop()}</span>}
+        {loaded && modelId && <span style={{ fontSize: 10, color: '#8888aa', fontFamily: 'monospace' }}>[{modelId.split(':')[2]}]</span>}
       </div>
       <span style={{
         fontSize: 11,

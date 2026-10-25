@@ -202,14 +202,8 @@ export async function uploadModelFile(
 }
 
 /**
- * Конвертация Teacher -> Student
- */
-export interface ConvertProgressCallback {
-  (progress: number, stage: string): void;
-}
-
-/**
- * Конвертация Teacher -> Student
+ * Конвертация Teacher -> Student с параметрами по умолчанию
+ * @deprecated Используйте convertStudent для настройки параметров
  */
 export async function convertTeacherToStudent(
   selectedFile: ModelFile,
@@ -218,6 +212,54 @@ export async function convertTeacherToStudent(
   onFilesLoaded?: () => void,
   setOutputPath?: (path: string) => void,
   onProgress?: ConvertProgressCallback
+): Promise<{ success: boolean; error?: string }> {
+  // Используем convertStudent с параметрами по умолчанию
+  return convertStudent(
+    selectedFile,
+    outputPath,
+    setLoading,
+    onFilesLoaded,
+    setOutputPath,
+    onProgress,
+    {
+      hidden_size_ratio: 0.5,
+      num_layers_ratio: 0.4,
+      num_heads_ratio: 0.5,
+      target_compression_ratio: 0.1,
+      quantization: 'Q4_0',
+      max_seq_length: 512,
+    }
+  );
+}
+
+/**
+ * Конвертация Teacher модели в Student модель
+ * Основной метод для дистилляции знаний
+ * @param selectedFile - файл Teacher модели
+ * @param outputPath - директория для сохранения Student
+ * @param conversionConfig - параметры конвертации (hidden_size_ratio, num_layers_ratio и т.д.)
+ */
+export interface ConvertProgressCallback {
+  (progress: number, stage: string): void;
+}
+
+export interface StudentConversionConfig {
+  hidden_size_ratio: number;
+  num_layers_ratio: number;
+  num_heads_ratio: number;
+  target_compression_ratio: number;
+  quantization: string;
+  max_seq_length: number;
+}
+
+export async function convertStudent(
+  selectedFile: ModelFile,
+  outputPath: string,
+  setLoading?: (loading: boolean) => void,
+  onFilesLoaded?: () => void,
+  setOutputPath?: (path: string) => void,
+  onProgress?: ConvertProgressCallback,
+  conversionConfig?: StudentConversionConfig
 ): Promise<{ success: boolean; error?: string }> {
   if (!outputPath.trim()) {
     return { success: false, error: 'Output path is required' };

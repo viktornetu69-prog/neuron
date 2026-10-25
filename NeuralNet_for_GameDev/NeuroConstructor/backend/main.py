@@ -75,6 +75,18 @@ class ConvertRequest(BaseModel):
     teacher_path: str
     student_path: str
 
+class ConvertWithConfigRequest(BaseModel):
+    """Запрос на конвертацию с параметрами"""
+    teacher_path: str
+    student_path: str
+    # Параметры архитектуры Student
+    hidden_size_ratio: float = 0.5        # Коэффициент скрытого размера (0.1-1.0)
+    num_layers_ratio: float = 0.4          # Коэффициент слоёв (0.1-1.0)
+    num_heads_ratio: float = 0.5           # Коэффициент головок (0.1-1.0)
+    target_compression_ratio: float = 0.1  # Целевое сжатие (0.01-0.5)
+    quantization: str = "Q4_0"             # Квантизация: Q4_0, Q5_0, Q6_0, Q8_0
+    max_seq_length: int = 512              # Максимальная длина последовательности
+
 class ConvertResponse(BaseModel):
     status: str
     conversion_results: str = ""
@@ -166,19 +178,58 @@ class ModelListResponse(BaseModel):
     files: List[ModelFileInfo] = []
 
 server_state = {
-    "engine": None,
+    "engine": None,  # Legacy: RESTEngine (только для управления)
     "model_loaded": False,
     "model_path": None,
     "model_info": None,
+    
+    # === Раздельные движки для Teacher и Student (не перезаписывают друг друга) ===
+    "teacher": {
+        "engine": None,  # LlamaCppEngine для Teacher
+        "model_loaded": False,
+        "model_path": None,
+        "model_info": {},  # metadata модели
+        "model_id": None,  # Уникальный ID модели
+        "loaded_at": None,  # Время загрузки
+    },
+    "student": {
+        "engine": None,  # LlamaCppEngine для Student
+        "model_loaded": False,
+        "model_path": None,
+        "model_info": {},  # metadata модели
+        "model_id": None,  # Уникальный ID модели
+        "loaded_at": None,  # Время загрузки
+    },
+    
+    # RESTEngine для конвертации и управления
+    "_rest_engine": None,
 }
+
+def generate_model_id(role: str, filename: str, path: str) -> str:
+    """Генерирует уникальный ID для модели.
+    Формат: role:filename:timestamp:hash
+    Пример: teacher:Qwen3.5-4B.gguf:20261026-002246:a3f2b1
+    """
+    import hashlib
+    from datetime import datetime
+    
+    # Генерируем timestamp
+    now = datetime.now().strftime("%Y%m%d-%H%M%S")
+    
+    # Создаём hash из пути (для точной идентификации файла)
+    hash_input = f"{role}:{filename}:{path}"
+    short_hash = hashlib.md5(hash_input.encode()).hexdigest()[:6]
+    
+    return f"{role}:{filename}:{now}:{short_hash}"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("REST API starting...")
     try:
+        # Инициализируем RESTEngine (только для управления и конвертации)
         server_state["engine"] = RESTEngine()
+        server_state["_rest_engine"] = server_state["engine"]
         server_state["model_loaded"] = False
-        server_state["model_path"] = None
         logger.info("Engine initialized")
     except Exception as e:
         logger.error(f"Failed to initialize engine: {e}")
@@ -206,10 +257,11 @@ async def health_check():
 @app.post("/api/chat/mode")
 async def chat_mode(request: ChatModeRequest):
     """Чат с выбором режима: human-teacher, human-student, human-teacher-student, teacher-student"""
-    if not server_state["engine"]:
+    # Используем _rest_engine для chat_mode, а не LlamaCppEngine
+    if not server_state.get("_rest_engine"):
         raise HTTPException(status_code=503, detail="Engine not initialized")
     try:
-        result = server_state["engine"].chat_mode(request.mode, request.message, request.history)
+        result = server_state["_rest_engine"].chat_mode(request.mode, request.message, request.history)
         return result
     except Exception as e:
         logger.error(f"Chat mode error: {e}")
@@ -218,10 +270,11 @@ async def chat_mode(request: ChatModeRequest):
 @app.post("/api/chat/export")
 async def chat_export(request: ChatExportRequest):
     """Экспорт истории чата"""
-    if not server_state["engine"]:
+    # Используем _rest_engine для export_chat
+    if not server_state.get("_rest_engine"):
         raise HTTPException(status_code=503, detail="Engine not initialized")
     try:
-        result = server_state["engine"].export_chat(request.mode, request.messages)
+        result = server_state["_rest_engine"].export_chat(request.mode, request.messages)
         return result
     except Exception as e:
         logger.error(f"Chat export error: {e}")
@@ -311,52 +364,130 @@ async def load_teacher_model(request: LoadTeacherRequest):
 
 @app.post("/api/models/load/teacher")
 async def load_teacher_model_only():
-    """Загрузить ТОЛЬКО Teacher модель"""
+    """Загрузить Teacher модель в отдельный engine (не перезаписывает Student)"""
     try:
         from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
         if not LLAMA_CPP_AVAILABLE:
             return {"success": False, "error": "llama-cpp-python not installed"}
 
+        # Сохраняем ссылку на RESTEngine (не трогаем)
+        rest_engine = server_state.get("_rest_engine")
+
         teacher_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "teacher")
         teacher_files = [f for f in os.listdir(teacher_dir) if f.endswith('.gguf')] if os.path.exists(teacher_dir) else []
         if not teacher_files:
-            return {"success": False, "error": "No Teacher models found"}
+            return {"success": False, "error": "No Teacher models found in " + teacher_dir}
 
         teacher_file = teacher_files[0]
         teacher_path = os.path.join(teacher_dir, teacher_file)
-        engine = LlamaCppEngine(model_path=teacher_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
 
-        server_state["engine"] = engine
+        logger.info(f"Loading Teacher model: {teacher_path}")
+        
+        # Создаём ОТДЕЛЬНЫЙ LlamaCppEngine для Teacher
+        teacher_engine = LlamaCppEngine(
+            model_path=teacher_path,
+            n_gpu_layers=0,
+            n_threads=min(8, os.cpu_count() or 4),
+        )
+
+        # Генерируем ModelID
+        model_id = generate_model_id("teacher", teacher_file, teacher_path)
+
+        # Сохраняем в раздельное состояние Teacher
+        server_state["teacher"]["engine"] = teacher_engine
+        server_state["teacher"]["model_loaded"] = True
+        server_state["teacher"]["model_path"] = teacher_path
+        server_state["teacher"]["model_id"] = model_id
+        server_state["teacher"]["loaded_at"] = datetime.now().isoformat()
+        server_state["teacher"]["model_info"] = {
+            "model_type": "teacher",
+            "filename": teacher_file,
+            "path": teacher_path,
+            "model_id": model_id,
+        }
+
+        # RESTEngine также загружаем teacher_engine для чата
+        if rest_engine and hasattr(rest_engine, "teacher_engine"):
+            rest_engine.teacher_engine = teacher_engine
+
+        # Обновляем legacy state для обратной совместимости
         server_state["model_loaded"] = True
         server_state["model_path"] = teacher_path
-        server_state["model_info"] = {"model_type": "teacher", "filename": teacher_file}
-        return {"success": True, "teacher_status": "loaded", "student_status": "not_loaded", "teacher_path": teacher_path}
+        server_state["model_info"] = server_state["teacher"]["model_info"]
+
+        logger.info(f"Teacher model loaded successfully: {teacher_file} (ID: {model_id})")
+        return {
+            "success": True,
+            "teacher_status": "loaded",
+            "student_status": server_state["student"]["model_loaded"] and "loaded" or "not_loaded",
+            "teacher_path": teacher_path,
+            "model_id": model_id,
+        }
     except Exception as e:
         logger.error(f"Load teacher error: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 @app.post("/api/models/load/student")
 async def load_student_model_only():
-    """Загрузить ТОЛЬКО Student модель"""
+    """Загрузить Student модель в отдельный engine (не перезаписывает Teacher)"""
     try:
         from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
         if not LLAMA_CPP_AVAILABLE:
             return {"success": False, "error": "llama-cpp-python not installed"}
 
+        # Сохраняем ссылку на RESTEngine (не трогаем)
+        rest_engine = server_state.get("_rest_engine")
+
         student_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "student")
         student_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')] if os.path.exists(student_dir) else []
         if not student_files:
-            return {"success": False, "error": "No Student models found"}
+            return {"success": False, "error": "No Student models found in " + student_dir}
 
         student_file = student_files[0]
         student_path = os.path.join(student_dir, student_file)
-        engine = LlamaCppEngine(model_path=student_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
 
-        server_state["engine"] = engine
+        logger.info(f"Loading Student model: {student_path}")
+        
+        # Создаём ОТДЕЛЬНЫЙ LlamaCppEngine для Student
+        student_engine = LlamaCppEngine(
+            model_path=student_path,
+            n_gpu_layers=0,
+            n_threads=min(8, os.cpu_count() or 4),
+        )
+
+        # Генерируем ModelID
+        model_id = generate_model_id("student", student_file, student_path)
+
+        # Сохраняем в раздельное состояние Student
+        server_state["student"]["engine"] = student_engine
+        server_state["student"]["model_loaded"] = True
+        server_state["student"]["model_path"] = student_path
+        server_state["student"]["model_id"] = model_id
+        server_state["student"]["loaded_at"] = datetime.now().isoformat()
+        server_state["student"]["model_info"] = {
+            "model_type": "student",
+            "filename": student_file,
+            "path": student_path,
+            "model_id": model_id,
+        }
+
+        # RESTEngine также загружаем student_engine для чата
+        if rest_engine and hasattr(rest_engine, "load_student_model"):
+            rest_engine.load_student_model(student_path)
+
+        # Обновляем legacy state для обратной совместимости
         server_state["model_loaded"] = True
         server_state["model_path"] = student_path
-        server_state["model_info"] = {"model_type": "student", "filename": student_file}
-        return {"success": True, "teacher_status": "not_loaded", "student_status": "loaded", "student_path": student_path}
+        server_state["model_info"] = server_state["student"]["model_info"]
+
+        logger.info(f"Student model loaded successfully: {student_file} (ID: {model_id})")
+        return {
+            "success": True,
+            "teacher_status": server_state["teacher"]["model_loaded"] and "loaded" or "not_loaded",
+            "student_status": "loaded",
+            "student_path": student_path,
+            "model_id": model_id,
+        }
     except Exception as e:
         logger.error(f"Load student error: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
@@ -369,16 +500,28 @@ async def load_both_models():
         if not LLAMA_CPP_AVAILABLE:
             return {"success": False, "error": "llama-cpp-python not installed"}
 
+        rest_engine = server_state.get("_rest_engine")
+
         teacher_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "teacher")
         teacher_files = [f for f in os.listdir(teacher_dir) if f.endswith('.gguf')] if os.path.exists(teacher_dir) else []
         if teacher_files:
             teacher_file = teacher_files[0]
             teacher_path = os.path.join(teacher_dir, teacher_file)
             engine = LlamaCppEngine(model_path=teacher_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
-            server_state["engine"] = engine
-            server_state["model_loaded"] = True
-            server_state["model_path"] = teacher_path
-            server_state["model_info"] = {"model_type": "teacher", "filename": teacher_file}
+            model_id = generate_model_id("teacher", teacher_file, teacher_path)
+            server_state["teacher"]["engine"] = engine
+            server_state["teacher"]["model_loaded"] = True
+            server_state["teacher"]["model_path"] = teacher_path
+            server_state["teacher"]["model_id"] = model_id
+            server_state["teacher"]["model_info"] = {
+                "model_type": "teacher",
+                "filename": teacher_file,
+                "path": teacher_path,
+                "model_id": model_id,
+            }
+            server_state["teacher"]["loaded_at"] = datetime.now().isoformat()
+            if rest_engine and hasattr(rest_engine, "teacher_engine"):
+                rest_engine.teacher_engine = engine
 
         student_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "student")
         student_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')] if os.path.exists(student_dir) else []
@@ -386,15 +529,70 @@ async def load_both_models():
             student_file = student_files[0]
             student_path = os.path.join(student_dir, student_file)
             engine = LlamaCppEngine(model_path=student_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
-            server_state["engine"] = engine
-            server_state["model_loaded"] = True
-            server_state["model_path"] = student_path
-            server_state["model_info"] = {"model_type": "student", "filename": student_file}
+            model_id = generate_model_id("student", student_file, student_path)
+            server_state["student"]["engine"] = engine
+            server_state["student"]["model_loaded"] = True
+            server_state["student"]["model_path"] = student_path
+            server_state["student"]["model_id"] = model_id
+            server_state["student"]["model_info"] = {
+                "model_type": "student",
+                "filename": student_file,
+                "path": student_path,
+                "model_id": model_id,
+            }
+            server_state["student"]["loaded_at"] = datetime.now().isoformat()
+            if rest_engine and hasattr(rest_engine, "load_student_model"):
+                rest_engine.load_student_model(student_path)
 
-        return {"success": True, "teacher_status": "loaded" if teacher_files else "not_loaded", "student_status": "loaded" if student_files else "not_loaded"}
+        return {
+            "success": True,
+            "teacher_status": "loaded" if teacher_files else "not_loaded",
+            "student_status": "loaded" if student_files else "not_loaded",
+            "teacher_model_id": server_state["teacher"]["model_id"] if teacher_files else None,
+            "student_model_id": server_state["student"]["model_id"] if student_files else None,
+        }
     except Exception as e:
         logger.error(f"Load all models error: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
+
+
+class ModelIdentifyResponse(BaseModel):
+    """Ответ на запрос идентификации моделей"""
+    teacher: Dict[str, Any] = {}
+    student: Dict[str, Any] = {}
+    rest_engine_available: bool = False
+
+
+@app.get("/api/models/identify", response_model=ModelIdentifyResponse)
+async def identify_models():
+    """Проверить, какие модели загружены и кто есть кто.
+    
+    Возвращает полную информацию о загруженных Teacher и Student моделях:
+    - loaded: загружена ли модель
+    - model_id: уникальный идентификатор
+    - model_path: путь к файлу
+    - model_type: тип модели (teacher/student)
+    - loaded_at: время загрузки
+    """
+    return ModelIdentifyResponse(
+        teacher={
+            "loaded": server_state["teacher"]["model_loaded"],
+            "model_id": server_state["teacher"]["model_id"],
+            "model_path": server_state["teacher"]["model_path"],
+            "model_type": server_state["teacher"]["model_info"].get("model_type", ""),
+            "loaded_at": server_state["teacher"]["loaded_at"],
+            "filename": server_state["teacher"]["model_info"].get("filename", ""),
+        },
+        student={
+            "loaded": server_state["student"]["model_loaded"],
+            "model_id": server_state["student"]["model_id"],
+            "model_path": server_state["student"]["model_path"],
+            "model_type": server_state["student"]["model_info"].get("model_type", ""),
+            "loaded_at": server_state["student"]["loaded_at"],
+            "filename": server_state["student"]["model_info"].get("filename", ""),
+        },
+        rest_engine_available=server_state.get("_rest_engine") is not None,
+    )
 
 @app.post("/api/models/student", response_model=CreateStudentResponse)
 async def create_student_model(request: CreateStudentRequest):
@@ -502,15 +700,18 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
 
 @app.post("/api/models/convert", response_model=ConvertResponse)
 async def convert_model(request: ConvertRequest):
-    """Конвертация Teacher -> Student с использованием ModelConverter из Core"""
-    if not server_state["engine"]:
-        raise HTTPException(status_code=503, detail="Engine not initialized")
+    """Конвертация Teacher -> Student с использованием ModelConverter из Core
+    Использует параметры по умолчанию.
+    """
+    # Используем _rest_engine (RESTEngine), а не LlamaCppEngine
+    if not server_state.get("_rest_engine"):
+        raise HTTPException(status_code=503, detail="REST engine not initialized")
 
     logger.info(f"Converting: {request.teacher_path} -> {request.student_path}")
 
     try:
-        # Вызываем engine.convert_model() который использует ModelConverter из Core
-        result = server_state["engine"].convert_model(request.teacher_path, request.student_path)
+        # Вызываем RESTEngine.convert_model() который использует ModelConverter из Core
+        result = server_state["_rest_engine"].convert_model(request.teacher_path, request.student_path)
 
         if result.get("status") == "error":
             return ConvertResponse(
@@ -526,6 +727,55 @@ async def convert_model(request: ConvertRequest):
         )
     except Exception as e:
         logger.error(f"Convert error: {e}", exc_info=True)
+        return ConvertResponse(status="error", error_message=str(e))
+
+
+@app.post("/api/models/convert-with-config", response_model=ConvertResponse)
+async def convert_model_with_config(request: ConvertWithConfigRequest):
+    """Конвертация Teacher -> Student с настраиваемыми параметрами.
+    
+    Параметры:
+    - hidden_size_ratio: коэффициент уменьшения hidden_size (0.1-1.0)
+    - num_layers_ratio: коэффициент уменьшения num_layers (0.1-1.0)
+    - num_heads_ratio: коэффициент уменьшения num_heads (0.1-1.0)
+    - target_compression_ratio: целевое сжатие (0.01-0.5)
+    - quantization: квантизация (Q4_0, Q5_0, Q6_0, Q8_0)
+    - max_seq_length: максимальная длина последовательности
+    """
+    if not server_state.get("_rest_engine"):
+        raise HTTPException(status_code=503, detail="REST engine not initialized")
+
+    logger.info(f"Converting with config: {request.teacher_path} -> {request.student_path}")
+    logger.info(f"Config: hidden_ratio={request.hidden_size_ratio}, layers_ratio={request.num_layers_ratio}, "
+                f"heads_ratio={request.num_heads_ratio}, compression={request.target_compression_ratio}")
+
+    try:
+        # Вызываем RESTEngine.convert_model_with_config() который передаёт параметры в ModelConverter
+        result = server_state["_rest_engine"].convert_model_with_config(
+            teacher_path=request.teacher_path,
+            student_path=request.student_path,
+            hidden_size_ratio=request.hidden_size_ratio,
+            num_layers_ratio=request.num_layers_ratio,
+            num_heads_ratio=request.num_heads_ratio,
+            target_compression_ratio=request.target_compression_ratio,
+            quantization=request.quantization,
+            max_seq_length=request.max_seq_length,
+        )
+
+        if result.get("status") == "error":
+            return ConvertResponse(
+                status="error",
+                error_message=result.get("error_message", "Conversion failed"),
+            )
+
+        return ConvertResponse(
+            status="converted",
+            conversion_results=result.get("conversion_results", ""),
+            compression_ratio=float(result.get("compression_ratio", 0.0)),
+            quality_score=float(result.get("quality_score", 0.0)),
+        )
+    except Exception as e:
+        logger.error(f"Convert with config error: {e}", exc_info=True)
         return ConvertResponse(status="error", error_message=str(e))
 
 @app.post("/api/models/validate", response_model=ValidateResponse)
@@ -1070,6 +1320,17 @@ class LLMStatusResponse(BaseModel):
     model_path: str = ""
     model_size_gb: float = 0.0
     model_type: str = ""  # "teacher" or "student"
+    # Separate states for teacher and student
+    teacher_loaded: bool = False
+    teacher_path: str = ""
+    teacher_model_id: Optional[str] = ""
+    teacher_loaded_at: Optional[str] = ""
+    student_loaded: bool = False
+    student_path: str = ""
+    student_model_id: Optional[str] = ""
+    student_loaded_at: Optional[str] = ""
+    teacher_files: List[Dict[str, Any]] = []
+    student_files: List[Dict[str, Any]] = []
     gpu_layers: int = 0
     ollama_available: bool = False
     backend_status: str = "unknown"
@@ -1099,40 +1360,77 @@ async def get_llm_status():
     try:
         from llm_engine import LLAMA_CPP_AVAILABLE, REQUESTS_AVAILABLE, LlamaCppEngine, OllamaEngine
         import os
-        
+
         llama_cpp_available = LLAMA_CPP_AVAILABLE
         ollama_available = REQUESTS_AVAILABLE
-        
+
         # Check teacher models
         teacher_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "NeuroConstructor.Core", "models", "teacher"
         )
-        
-        model_files = []
+
+        teacher_model_files = []
         if os.path.exists(teacher_dir):
             for f in os.listdir(teacher_dir):
                 if f.endswith('.gguf'):
                     fpath = os.path.join(teacher_dir, f)
-                    model_files.append({
+                    teacher_model_files.append({
                         "filename": f,
                         "size_gb": round(os.path.getsize(fpath) / (1024**3), 2),
                         "path": fpath
                     })
-        
-        # Get values with safe defaults
-        model_loaded = server_state.get("model_loaded", False)
-        model_path = server_state.get("model_path") or ""
-        model_info = server_state.get("model_info") or {}
-        model_size_gb = model_info.get("model_size_gb", 0)
-        model_type = model_info.get("model_type", "")
+
+        # Check student models
+        student_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "NeuroConstructor.Core", "models", "student"
+        )
+
+        student_model_files = []
+        if os.path.exists(student_dir):
+            for f in os.listdir(student_dir):
+                if f.endswith('.gguf'):
+                    fpath = os.path.join(student_dir, f)
+                    student_model_files.append({
+                        "filename": f,
+                        "size_gb": round(os.path.getsize(fpath) / (1024**3), 2),
+                        "path": fpath
+                    })
+
+        # Get separate model states
+        teacher_loaded = server_state.get("teacher", {}).get("model_loaded", False)
+        teacher_path = server_state.get("teacher", {}).get("model_path") or ""
+        teacher_info = server_state.get("teacher", {}).get("model_info") or {}
+        teacher_size_gb = teacher_info.get("model_size_gb", 0)
+        teacher_type = teacher_info.get("model_type", "")
+        teacher_model_id = server_state.get("teacher", {}).get("model_id")
+        teacher_loaded_at = server_state.get("teacher", {}).get("loaded_at")
+
+        student_loaded = server_state.get("student", {}).get("model_loaded", False)
+        student_path = server_state.get("student", {}).get("model_path") or ""
+        student_info = server_state.get("student", {}).get("model_info") or {}
+        student_size_gb = student_info.get("model_size_gb", 0)
+        student_type = student_info.get("model_type", "")
+        student_model_id = server_state.get("student", {}).get("model_id")
+        student_loaded_at = server_state.get("student", {}).get("loaded_at")
 
         return LLMStatusResponse(
             llama_cpp_available=llama_cpp_available,
-            model_loaded=model_loaded,
-            model_path=model_path,
-            model_size_gb=model_size_gb,
-            model_type=model_type,
+            model_loaded=teacher_loaded or student_loaded,
+            model_path=teacher_path if teacher_loaded else student_path,
+            model_size_gb=teacher_size_gb if teacher_loaded else student_size_gb,
+            model_type=teacher_type if teacher_loaded else student_type,
+            teacher_loaded=teacher_loaded,
+            teacher_path=teacher_path,
+            teacher_model_id=teacher_model_id,
+            teacher_loaded_at=teacher_loaded_at,
+            student_loaded=student_loaded,
+            student_path=student_path,
+            student_model_id=student_model_id,
+            student_loaded_at=student_loaded_at,
+            teacher_files=teacher_model_files,
+            student_files=student_model_files,
             gpu_layers=0,
             backend_status="ready" if llama_cpp_available else "llama-cpp not installed",
             ollama_available=ollama_available,
@@ -1218,166 +1516,6 @@ async def fine_tune_student(request: BenchmarkFineTuneRequest):
 
 # ============================================
 # Plugin Manager endpoints
-# ============================================
-
-# ============================================
-# Model Load endpoints
-# ============================================
-
-@app.post("/api/models/load/teacher", response_model=ModelLoadAllResponse)
-async def load_teacher_model_api():
-    """Загрузить Teacher модель в LLM Engine"""
-    try:
-        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
-
-        if not LLAMA_CPP_AVAILABLE:
-            return ModelLoadAllResponse(
-                success=False,
-                teacher_status="error",
-                error="llama-cpp-python not installed"
-            )
-
-        # Find teacher models
-        teacher_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "NeuroConstructor.Core", "models", "teacher"
-        )
-
-        teacher_files = []
-        if os.path.exists(teacher_dir):
-            teacher_files = [f for f in os.listdir(teacher_dir) if f.endswith('.gguf')]
-
-        if not teacher_files:
-            return ModelLoadAllResponse(
-                success=False,
-                teacher_status="no_models",
-                error="No Teacher models found"
-            )
-
-        # Load first available model
-        teacher_file = teacher_files[0]
-        teacher_path = os.path.join(teacher_dir, teacher_file)
-
-        engine = LlamaCppEngine(
-            model_path=teacher_path,
-            n_gpu_layers=0,
-            n_threads=min(8, os.cpu_count() or 4),
-        )
-
-        # Save to server state
-        server_state["engine"] = engine
-        server_state["model_loaded"] = True
-        server_state["model_path"] = teacher_path
-        server_state["model_info"] = {"model_type": "teacher", "filename": teacher_file}
-
-        return ModelLoadAllResponse(
-            success=True,
-            teacher_status="loaded",
-            student_status="not_loaded",
-            teacher_path=teacher_path,
-            timestamp=datetime.now().isoformat()
-        )
-
-    except Exception as e:
-        logger.error(f"Load teacher error: {e}", exc_info=True)
-        return ModelLoadAllResponse(
-            success=False,
-            teacher_status="error",
-            error=str(e),
-            timestamp=datetime.now().isoformat()
-        )
-
-@app.post("/api/models/load/student", response_model=ModelLoadAllResponse)
-async def load_student_model_api():
-    """Загрузить Student модель в LLM Engine"""
-    try:
-        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
-
-        if not LLAMA_CPP_AVAILABLE:
-            return ModelLoadAllResponse(
-                success=False,
-                student_status="error",
-                error="llama-cpp-python not installed"
-            )
-
-        # Find student models
-        student_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "NeuroConstructor.Core", "models", "student"
-        )
-
-        student_files = []
-        if os.path.exists(student_dir):
-            student_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')]
-
-        if not student_files:
-            return ModelLoadAllResponse(
-                success=False,
-                student_status="no_models",
-                error="No Student models found"
-            )
-
-        # Load first available model
-        student_file = student_files[0]
-        student_path = os.path.join(student_dir, student_file)
-
-        engine = LlamaCppEngine(
-            model_path=student_path,
-            n_gpu_layers=0,
-            n_threads=min(8, os.cpu_count() or 4),
-        )
-
-        # Save to server state
-        server_state["engine"] = engine
-        server_state["model_loaded"] = True
-        server_state["model_path"] = student_path
-        server_state["model_info"] = {"model_type": "student", "filename": student_file}
-
-        return ModelLoadAllResponse(
-            success=True,
-            teacher_status="not_loaded",
-            student_status="loaded",
-            student_path=student_path,
-            timestamp=datetime.now().isoformat()
-        )
-
-    except Exception as e:
-        logger.error(f"Load student error: {e}", exc_info=True)
-        return ModelLoadAllResponse(
-            success=False,
-            student_status="error",
-            error=str(e),
-            timestamp=datetime.now().isoformat()
-        )
-
-@app.post("/api/models/load-all", response_model=ModelLoadAllResponse)
-async def load_both_models_api():
-    """Загрузить Teacher и Student модели одновременно"""
-    try:
-        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
-
-        if not LLAMA_CPP_AVAILABLE:
-            return ModelLoadAllResponse(
-                success=False,
-                error="llama-cpp-python not installed"
-            )
-
-        result = server_state["engine"].load_both_models() if server_state["engine"] else {"teacher_status": "error", "student_status": "error"}
-        return ModelLoadAllResponse(
-            success=result.get("teacher_status") == "loaded" and result.get("student_status") == "loaded",
-            teacher_status=result.get("teacher_status", "error"),
-            student_status=result.get("student_status", "error"),
-            timestamp=datetime.now().isoformat()
-        )
-
-    except Exception as e:
-        logger.error(f"Load all models error: {e}", exc_info=True)
-        return ModelLoadAllResponse(
-            success=False,
-            error=str(e),
-            timestamp=datetime.now().isoformat()
-        )
-
 # ============================================
 # Plugin Manager endpoints
 # ============================================
@@ -1502,34 +1640,54 @@ async def unload_model(model_type: str):
     """Выгрузить модель из памяти (teacher или student)"""
     try:
         model_type_lower = model_type.lower()
-        
+
         if model_type_lower not in ['teacher', 'student']:
             return ModelUnloadResponse(
                 success=False,
                 error=f"Неверный тип модели: {model_type}. Допустимые значения: teacher, student"
             )
-        
+
         # Проверяем, что модель загружена
-        if not server_state.get("engine"):
+        if not server_state.get(model_type_lower, {}).get("model_loaded", False):
             return ModelUnloadResponse(
                 success=False,
                 message=f"Модель {model_type_lower} не загружена"
             )
-        
-        # Проверяем, что это та модель, которую мы выгружаем
-        current_type = server_state.get("model_info", {}).get("model_type", "")
-        if current_type != model_type_lower:
-            return ModelUnloadResponse(
-                success=False,
-                message=f"Загружена модель {current_type}, а не {model_type_lower}"
-            )
-        
+
         # Выгружаем модель
-        server_state["engine"] = None
-        server_state["model_loaded"] = False
-        server_state["model_path"] = ""
-        server_state["model_info"] = {}
-        
+        server_state[model_type_lower]["engine"] = None
+        server_state[model_type_lower]["model_loaded"] = False
+        server_state[model_type_lower]["model_path"] = None
+        server_state[model_type_lower]["model_info"] = {}
+
+        # Также очищаем RESTEngine для чата
+        rest_engine = server_state.get("_rest_engine")
+        if rest_engine:
+            if model_type_lower == "teacher":
+                rest_engine.teacher_engine = None
+            elif model_type_lower == "student":
+                rest_engine.student_engine = None
+
+        # Если выгрута единственная загруженная модель, обновляем legacy state
+        teacher_loaded = server_state.get("teacher", {}).get("model_loaded", False)
+        student_loaded = server_state.get("student", {}).get("model_loaded", False)
+
+        if not teacher_loaded and not student_loaded:
+            server_state["engine"] = None
+            server_state["model_loaded"] = False
+            server_state["model_path"] = None
+            server_state["model_info"] = {}
+        elif teacher_loaded:
+            server_state["engine"] = server_state["teacher"]["engine"]
+            server_state["model_loaded"] = True
+            server_state["model_path"] = server_state["teacher"]["model_path"]
+            server_state["model_info"] = server_state["teacher"]["model_info"]
+        elif student_loaded:
+            server_state["engine"] = server_state["student"]["engine"]
+            server_state["model_loaded"] = True
+            server_state["model_path"] = server_state["student"]["model_path"]
+            server_state["model_info"] = server_state["student"]["model_info"]
+
         logger.info(f"Model {model_type_lower} unloaded successfully")
         return ModelUnloadResponse(
             success=True,

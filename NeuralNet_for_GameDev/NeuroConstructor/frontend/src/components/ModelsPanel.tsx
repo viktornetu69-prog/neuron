@@ -76,6 +76,20 @@ export function ModelsPanel({
 
   const { loadFiles, selectFile, uploadFile, clearError } = modelActions;
 
+  // --- Периодическая перезагрузка файлов моделей ---
+  // Это решает проблему, когда файлы не подхватываются после навигации между вкладками
+  useEffect(() => {
+    if (!isServerAvailable) return;
+
+    const interval = setInterval(() => {
+      loadFiles().catch(err => {
+        console.error('Failed to reload model files:', err);
+      });
+    }, 10000); // Загружаем файлы каждые 10 секунд
+
+    return () => clearInterval(interval);
+  }, [isServerAvailable, loadFiles]);
+
   // --- Обработчики ---
 
   // Обработка выбора файла из формы Student
@@ -112,33 +126,71 @@ export function ModelsPanel({
     }
   };
 
-  // Обработка конвертации
-  const handleConvert = async () => {
+  // Обработка конвертации с параметрами
+  const handleConvert = async (config?: any) => {
     if (!selectedFile) return;
+
+    // Получаем параметры из диалога или используем значения по умолчанию
+    const conversionConfig = config || {
+      hidden_size_ratio: 0.5,
+      num_layers_ratio: 0.4,
+      num_heads_ratio: 0.5,
+      target_compression_ratio: 0.1,
+      quantization: 'Q4_0',
+      max_seq_length: 512,
+    };
 
     setConvertProgress({ progress: 0, stage: 'Подготовка...' });
 
-    const result = await convertTeacherToStudent(
-      selectedFile,
-      outputPath,
-      undefined, // loading
-      loadFiles,
-      setOutputPath,
-      (progress: number, stage: string) => {
-        setConvertProgress({ progress, stage });
-      }
-    );
+    // Извлекаем только имя файла (без пути)
+    const filename = selectedFile.filename;
+    const baseName = filename.replace(/\.gguf$/i, '');
 
-    if (result.success) {
+    // Пути относительные (без MODELS_DIR префикса) — бэкенд сам добавит MODELS_DIR
+    const teacherPath = `teacher/${filename}`;
+    const studentDir = outputPath.replace(/\/+$/, '');
+    const studentPath = `${studentDir}/${baseName}_student.gguf`;
+
+    try {
+      setConvertProgress({ progress: 10, stage: 'Загрузка параметров...' });
+
+      // Вызываем API с параметрами конвертации
+      const { convertModelWithConfig } = await import('@/api.client');
+      const response = await convertModelWithConfig({
+        teacher_path: teacherPath,
+        student_path: studentPath,
+        hidden_size_ratio: conversionConfig.hidden_size_ratio,
+        num_layers_ratio: conversionConfig.num_layers_ratio,
+        num_heads_ratio: conversionConfig.num_heads_ratio,
+        target_compression_ratio: conversionConfig.target_compression_ratio,
+        quantization: conversionConfig.quantization,
+        max_seq_length: conversionConfig.max_seq_length,
+      });
+
+      console.log('Convert response:', response);
+
+      if (response.status === 'error') {
+        setConvertProgress({ progress: -1, stage: 'Ошибка конвертации' });
+        alert('❌ Ошибка конвертации: ' + (response.error_message || 'Неизвестная ошибка'));
+        clearError();
+        return;
+      }
+
+      setConvertProgress({ progress: 100, stage: 'Конвертация завершена!' });
+      await loadFiles();
+      setOutputPath('student/');
+
       alert('✅ Student успешно создан!');
       setShowConvertDialog(false);
       setConvertProgress(null);
+
       // После успешной конвертации показываем сравнение
       setShowComparisonView(true);
-    } else {
-      alert('❌ Ошибка создания Student: ' + (result.error || 'Неизвестная ошибка'));
-      clearError();
-      setConvertProgress(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Convert error:', err);
+      setConvertProgress({ progress: -1, stage: 'Ошибка конвертации' });
+      alert('❌ Ошибка конвертации: ' + msg);
     }
   };
 
@@ -177,6 +229,32 @@ export function ModelsPanel({
   // Открытие file picker
   const openFilePicker = () => {
     fileInputRef.current?.click();
+  };
+
+  // Обработка копирования параметров Teacher в Student
+  const handleCopyTeacherParams = () => {
+    if (!teacherAnalysis?.architecture) {
+      alert('Сначала выберите и проанализируйте Teacher модель');
+      return;
+    }
+
+    const arch = teacherAnalysis.architecture;
+
+    // Вычисляем параметры Student на основе Teacher
+    const newArch: StudentArchitecture = {
+      model_family: arch.model_family?.toLowerCase() || 'qwen3',
+      hidden_size: Math.max(512, Math.floor((arch.hidden_size || 4096) * 0.5)),
+      num_layers: Math.max(4, Math.floor((arch.num_layers || 32) * 0.4)),
+      num_heads: Math.max(4, Math.floor((arch.num_heads || 32) * 0.5)),
+      num_kv_heads: Math.max(1, Math.floor((arch.num_heads || 32) * 0.125)),
+      vocab_size: arch.vocab_size || 32000,
+      max_position_embeddings: arch.max_position_embeddings || 2048,
+      rope_theta: arch.rope_theta || 10000,
+      head_dim: arch.head_dim || 128,
+    };
+
+    setStudentArch(newArch);
+    setShowCreateStudentDialog(true);
   };
 
   // --- Данные для отображения архитектуры ---
@@ -365,6 +443,19 @@ export function ModelsPanel({
             }}
           >
             ⟳ Конвертировать
+          </button>
+          <button
+            onClick={handleCopyTeacherParams}
+            disabled={!teacherAnalysis || !isServerAvailable || loading}
+            style={{
+              ...buttonBaseStyle,
+              background: teacherAnalysis && isServerAvailable ? '#2196f3' : '#1e1e30',
+              cursor: teacherAnalysis && isServerAvailable ? 'pointer' : 'not-allowed',
+              position: 'relative',
+            }}
+            title="Скопировать архитектуру Teacher для Student"
+          >
+            📋 Параметры
           </button>
         </div>
 

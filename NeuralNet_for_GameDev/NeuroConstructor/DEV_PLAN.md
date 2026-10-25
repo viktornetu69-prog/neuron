@@ -505,5 +505,176 @@ Pipeline: создать тест → прогнать Teacher → прогна�
 | **Этап 5: Creative Tools** | 🟢 P3 | Этапы 1-4, Blender/Unity API | ⬜ TODO |
 
 **Сейчас фокус на Этапе 1:** лингвистический benchmark — создать тест, прогнать Teacher/Student, сравнить, дообучить.
+
+---
+
+## 9.2 Скиллы и системные промты
+
+### 9.2.1 Система скиллов
+
+Скиллы — это специализированные модули, которые расширяют способности Teacher и Student моделей. Каждый скилл — это плагин с чётким интерфейсом.
+
+```
+Skills System (PluginInterface)
+    ├── 🔍 SearchSkill        — поиск в интернете, БД, Knowledge Graph
+    ├── 🎨 CreativeSkill      — генерация изображений, 3D-моделей, текста
+    ├── 🔧 DevSkill           — генерация кода, рефакторинг, тесты
+    ├── 🎮 GameDevSkill       — Blender API, Unity CLI, Unreal Tooling
+    ├── 📊 AnalyticsSkill     — анализ данных, визуализация, отчёты
+    ├── 🔊 AudioSkill         — ASR, TTS, звуковая обработка
+    ├── 🖼️ CVSkill             — классификация, детекция, сегментация
+    └── 🔄 AutoFixSkill       — автоматическое исправление ошибок
+```
+
+**Реализация:**
+- Каждый скилл реализует `SkillInterface` (`execute()`, `get_capabilities()`, `get_config()`)
+- Скиллы регистрируются в `PluginManager`
+- Конфигурация: `NeuroConstructor.Core/config/skills_config.json`
+- Команды: `GET /api/skills/list`, `POST /api/skills/execute`
+
+**Пример:** `CreativeSkill` для Blender
+```python
+class CreativeSkill(SkillInterface):
+    name = "creative"
+    capabilities = ["blender_generate", "mesh_edit", "texture_apply"]
+    
+    async def execute(self, command: str, params: dict) -> SkillResult:
+        # Отправка команды через Blender API
+        # Возврат результата с метаданными
+```
+
+### 9.2.2 Системные промты
+
+Системные промты — это шаблоны, которые определяют «роль» и поведение модели при генерации. Каждый пройт хранится в `NeuroConstructor.Core/prompts/`.
+
+```
+System Prompts
+    ├── system_teacher.json      — Teacher как эксперт-наставник
+    ├── system_student.json      — Student как ученик с ограничениями
+    ├── system_creative.json     — креативный режим (Blender, 3D)
+    ├── system_code.json         — генерация и рефакторинг кода
+    ├── system_analytics.json    — аналитика и отчёты
+    └── system_multimodal.json   — мультимодальный режим
+```
+
+**Структура системного промта:**
+```json
+{
+  "name": "teacher",
+  "version": "1.0",
+  "system_prompt": "Ты — Teacher Model, эксперт-наставник. Отвечай подробно, объясняй концепции, приводи примеры из практики.",
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 2048,
+    "top_p": 0.95,
+    "frequency_penalty": 0.1
+  },
+  "skills": ["knowledge", "explanation", "code_generation"],
+  "fallback": "student"
+}
+```
+
+**Применение:**
+- `llm_engine.py` загружает промпт при инициализации
+- Промпт передаётся в `system` поле API-запроса
+- Динамическая подмена: Teacher → Student при low-confidence
+- A/B тестирование промптов: `prompt_evaluation.py`
+
+**API:**
+- `GET /api/prompts/list` — список системных промптов
+- `POST /api/prompts/switch` — переключение промпта
+- `POST /api/prompts/evaluate` — A/B тестирование
+
+---
+
+## 9.3 Визуальное отображение рассуждений моделей в реальном времени
+
+### 9.3.1 Token-by-Token Visualization
+
+Ключевая фича: **пользователь видит, как модель "думает" в реальном времени** — генерация и подгрузка каждого токена с визуализацией.
+
+```
+Token Stream Pipeline
+    ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+    │  LLM Engine  │────▶│ Token Parser │────▶│  Visual Renderer│
+    │ (llama.cpp/  │     │  (streaming) │     │  (WebSocket)    │
+    │  Ollama)     │     │              │     │                 │
+    └─────────────┘     └──────────────┘     └────────┬────────┘
+                                                      │
+                    ┌─────────────────────────────────┤
+                    │                                 │
+              ┌─────┴─────┐                   ┌─────┴─────┐
+              │ Text Panel│                   │ Heat Map  │
+              │ (chat)    │                   │ (tokens)  │
+              └───────────┘                   └───────────┘
+                                                      │
+                    ┌─────────────────────────────────┤
+                    │                                 │
+              ┌─────┴─────┐                   ┌─────┴─────┐
+              │Attention  │                   │Token Prob │
+              │  View     │                   │  Ranking  │
+              └───────────┘                   └───────────┘
+```
+
+**Техническая реализация:**
+- `llm_engine.py` → streaming генерация (llama-cpp-python `n_predict=0`, chunk-by-chunk)
+- WebSocket (`/ws/chat/{session_id}`) — передача токенов в реальном времени
+- Frontend: `TokenStreamRenderer.tsx` — отображение каждого токена как только он получен
+- `AttentionVisualizer.tsx` — heat map attention weights (layer × head × seq_len)
+
+**Компоненты визуализации:**
+
+1. **Stream Chat Panel** — текст появляется слово за словом (не ждать окончания)
+2. **Token Probability Heatmap** — цветная карта: яркие = высокая вероятность
+3. **Attention Flow** — анимированные линии между "понимаемыми" токенами
+4. **Token Rank Panel** — топ-N альтернатив для каждого токена (с вероятностями)
+5. **Generation Metrics** — latency per token, throughput (tok/s), total time
+
+**API + WebSocket:**
+```
+POST /api/chat/stream     →  { session_id, messages, mode }
+WS   /ws/chat/{session_id} →  { type: "token", data: { token, text, prob } }
+                            →  { type: "attention", data: { layer, head, weights } }
+                            →  { type: "metrics", data: { tokens_per_sec, total_time } }
+                            →  { type: "done", data: { total_tokens, stop_reason } }
+```
+
+**Frontend компоненты:**
+- `TokenStreamRenderer.tsx` — основной компонент стриминга
+- `AttentionHeatMap.tsx` — heat map attention weights
+- `TokenRanking.tsx` — ranking альтернативных токенов
+- `GenerationMetrics.tsx` — метрики генерации в реальном времени
+- `ReasoningTrajectory.tsx` — визуализация "пути рассуждений" модели
+
+**Метрики рассуждений:**
+| Метрика | Описание |
+|---------|----------|
+| **Token Latency** | Время между токенами (мс) |
+| **Throughput** | Скорость генерации (ток/сек) |
+| **Attention Entropy** | Насколько "сосредоточена" модель |
+| **Decision Confidence** | Средний probability выбранных токенов |
+| **Reasoning Depth** | Количество "шагов" в рассуждении |
+
+**Пример использования:**
+Пользователь спрашивает: *"Почему кошка мяукает?"*
+- Каждое слово появляется в реальном времени
+- Heatmap показывает, на какие слова из вопроса модель "смотрит"
+- Ranking показывает альтернативы (мяукает/рычит/лаял)
+- Metrics: 45 ток/сек, уверенность 0.87, attention entropy 0.31
+
+---
+
+## 9.4 Приоритеты реализации фич
+
+| Фича | Приоритет | Зависит от | Статус |
+|------|-----------|------------|--------|
+| **Скиллы** | 🔴 P0 | Plugin System ✅ | ⬜ TODO |
+| **Системные промты** | 🔴 P0 | LLM Engine ✅ | ⬜ TODO |
+| **Stream Chat** | 🟡 P1 | WebSocket | ⬜ TODO |
+| **Attention Heatmap** | 🟡 P1 | Stream Chat, llama.cpp attention | ⬜ TODO |
+| **Token Ranking** | 🟠 P2 | Stream Chat, logits sampling | ⬜ TODO |
+| **Reasoning Trajectory** | 🟢 P3 | Stream Chat + Attention | ⬜ TODO |
+
+**Сейчас фокус на Stream Chat** — базовая реализация real-time отображения генерации.
 ```
 
