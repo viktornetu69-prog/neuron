@@ -175,3 +175,335 @@ Stage6Integration (Singleton orchestrator)
 4. **Внешний вид + мультиязычность** — главный приоритет продукта.
 5. Далее: реализация ForecastEngine / SelfLearning / F-фичи.
 
+---
+
+## 8. 🔮 Roadmap: Улучшение конвертации Teacher → Student
+
+**Диагноз:** текущая конвертация — это «математическое масштабирование JSON-конфига», а не реальное преобразование модели. Student `weights.bin` — точная копия Teacher через `shutil.copy2()`. RealQuantizer существует, но не вызывается. Архитектура пересчитывается дважды (двойное сжатие). Quality Assurance считает score по гиперпараметрам, без реального инференс-теста.
+
+### 🔴 Критичные (блок 100% конвертации)
+
+| № | Задача | Файл | Детали | Статус |
+|---|--------|------|--------|--------|
+| R1 | **Убрать дублирование масштабирования** | `model_converter.py` — `_create_student_from_teacher()` + `_apply_intelligent_compression()` | Два прохода: сначала ×0.5/×0.4/×0.5, потом ×√0.316. Итог: hidden ×0.158, layers ×0.126. Оставить ОДИН шаг с единым коэффициентом. | ⬜ TODO |
+| R2 | **Интегрировать RealQuantizer в пайплайн** | `model_converter.py` → `real_quantizer.py` | Вызывать `RealQuantizer.quantize_model()` вместо `shutil.copy2()`. Реально квантифицировать FP32 → Q4_0 через `GGUFBuilder`. | ⬜ TODO |
+| R3 | **Копировать весы через state_dict, а не файл** | `model_converter.py` — `_save_student_model()` | Загружать state_dict из Teacher (torch/safetensors), применять квантификацию к каждой матрице, сохранять результат через GGUFBuilder. | ⬜ TODO |
+| R4 | **Дескретизировать vocab_size** | `model_converter.py` — `_create_student_from_teacher()` | Сейчас vocab_size копируется 1:1 (32000), хотя config заявляет 10x сжатие. Уменьшить до ~1/2–1/3 (32000 → 12000–16000). | ⬜ TODO |
+
+### 🟡 Важные (блок качества валидации)
+
+| № | Задача | Файл | Детали | Статус |
+|---|--------|------|--------|--------|
+| R5 | **Пересчитать quality metrics** | `quality_assurance.py` — `_calculate_architectural_similarity()` | Нормализация относительно max (8000) даёт всегда низкий score для маленького Student. Сравнивать ratio размеров, а не нормализованные абсолютные значения. | ⬜ TODO |
+| R6 | **Добавить реальный инференс-тест** | `quality_assurance.py` + `model_converter.py` | Прогнать один и тот же вход через Teacher и Student, сравнить outputs (cosine similarity / KL-divergence). Это единственный способ проверить 100% сходимость. | ⬜ TODO |
+| R7 | **Сохранять compressed_size_gb правильно** | `model_converter.py` — `_save_student_model()` | В config.json `size_bytes` Student = `size_bytes` Teacher (копируется). После квантификации размер будет ~1/2–1/4. | ⬜ TODO |
+
+### 🟢 Желательные (оптимизация)
+
+| № | Задача | Файл | Детали | Статус |
+|---|--------|------|--------|--------|
+| R8 | **Экспериментальная настройка ratio** | `model_converter_config.json` | Позволить пользователю выбирать target_compression_ratio (0.05, 0.1, 0.2) вместо хардкода 0.1. | ⬜ TODO |
+| R9 | **Выбор метода квантификации** | `real_quantizer.py` | Поддержка q4_0, q5_0, q6_0, q8_0 (сейчас только q4_0). | ⬜ TODO |
+| R10 | **Валидация загружаемости Student** | `_validate_conversion_quality()` | После сохранения — попробовать загрузить Student через `gguf.GGUFModel.from_file()`. Если не грузится — конвертация провалилась. | ⬜ TODO |
+
+---
+
+## 8.1 Приоритетный бэклог (последовательность реализации)
+
+```
+Приоритет 1 (must-have):
+  R1 → Убрать двойное сжатие архитектуры
+  R2 → Интегрировать RealQuantizer
+  R3 → Реальный перенос весов (state_dict + quantize)
+
+Приоритет 2 (should-have):
+  R5 → Исправить quality metrics
+  R6 → Инференс-тест Teacher vs Student
+  R4 → Дескретизация vocab_size
+
+Приоритет 3 (nice-to-have):
+  R7 → Правильный compressed_size_gb
+  R8 → Настраиваемый ratio
+  R9 → Выбор метода квантификации
+  R10 → Валидация загружаемости Student
+
+---
+
+## 9. 🌍 Визион: Мультимодальный дистиллятор знаний
+
+**Философия:** Teacher — неизменный эталон. Student учится у Teacher'а, а не у данных.
+Pipeline: создать тест → прогнать Teacher → прогнать Student → сравнить → дообучить Student → повторить с новым модальностью.
+
+### 📝 Этап 1: Базовый лингвистический дистиллятор (MVP)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Создать базовый датасет для теста LM (100-150 тестов)        │
+│     - QA-пары (шаблон "qa_pairs")                                │
+│     - Чат-диалоги (шаблон "simple_chat")                         │
+│     - Код-примеры (шаблон "code_examples")                       │
+│     - Сохранить manifest + train/val/test splits                  │
+│                                                                  │
+│  2. Загрузить Teacher LM (GGUF/Q4_0)                             │
+│     - Проанализировать архитектуру (GGUF header)                  │
+│     - Зафиксировать веса Teacher (НЕ ОБУЧАЕМ)                     │
+│                                                                  │
+│  3. Прогнать датасет по Teacher → сохранить ответы                │
+│     - input: вопросы из test split                                │
+│     - output: ответы Teacher (сохраняем как "ground truth")       │
+│                                                                  │
+│  4. Создать Student LM (уменьшенная архитектура)                  │
+│     - hidden_size × 0.5, layers × 0.4, heads × 0.5              │
+│     - Квантификация Q4_0                                         │
+│                                                                  │
+│  5. Прогнать тот же датасет по Student → сохранить ответы          │
+│     - Те же input, тот же test split                              │
+│                                                                  │
+│  6. Сравнить Teacher vs Student                                   │
+│     - Cosine similarity ответов                                  │
+│     - BLEU / ROUGE score                                        │
+│     - Перплексия (teacher vs student)                            │
+│     - Exact match percentage                                     │
+│     - Generate report: какие тесты passed, какие failed            │
+│                                                                  │
+│  7. Если результат < 85% → дообучить Student                      │
+│     - Создать fine-tuning датасет (супервизорное обучение)        │
+│     - Пейринг: Teacher ответ = target, Student ответ = signal     │
+│     - Distillation loss: KL-divergence between logits             │
+│     - Fine-tune Student на (input, Teacher_output)                │
+│     - Вернуться к шагу 5                                         │
+│                                                                  │
+│  8. Если результат ≥ 85% → Student готов для LM                   │
+│     - Сохранить финальный checkpoint                              │
+│     - Generate benchmark report                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Файлы для реализации:**
+- `NeuroConstructor.Core/core/` — `lm_benchmark.py`, `distillation_trainer.py`, `answer_comparator.py`
+- `backend/main.py` — `/api/benchmark/create`, `/api/benchmark/run`, `/api/benchmark/compare`, `/api/benchmark/fine-tune`
+- `frontend/` — экран **Benchmark** с таблицей результатов
+
+**Тесты: 100-150 примеров**
+- 50 QA-пар (general knowledge)
+- 30 chat-диалогов (multi-turn context)
+- 20 code-примеров (syntax + logic)
+- 20 prompt-response (creative tasks)
+
+---
+
+### 🖼️ Этап 2: Computer Vision — дистилляция визуальных признаков
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Скачать новую Teacher CV модель (напр. CLIP / ViT)            │
+│     - Teacher НЕ обучаем — только inference                       │
+│                                                                  │
+│  2. СоздатCV датасет (изображения)                                │
+│     - Загрузить набор картинок (CIFAR-10 / COCO / custom)         │
+│     - Классификация + детекция + segmentation                     │
+│                                                                  │
+│  3. Прогнать Teacher → сохранить активации                         │
+│     - Классы объектов                                             │
+│     - Bounding boxes                                              │
+│     - Feature maps (активные нейроны)                              │
+│                                                                  │
+│  4. Создать Student CV модель (smaller ViT / MobileNet)            │
+│     - Меньше слоёв, меньше каналов, квантификация                 │
+│                                                                  │
+│  5. Прогнать тот же датасет по Student → сравнить                  │
+│     - Top-1 / Top-5 accuracy vs Teacher                           │
+│     - mAP (mean Average Precision) для детекции                   │
+│     - Feature map similarity (CSSIM / L2)                         │
+│                                                                  │
+│  6. Distillation для CV                                           │
+│     - Feature-level distillation (student feature map ≈ teacher)  │
+│     - Logits-level distillation (KL-divergence)                   │
+│     - Relationship-level distillation (gram matrices)             │
+│                                                                  │
+│  7. Fine-tune Student → повторить сравнение                       │
+│     - До convergence или ≥ 90% от Teacher                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Файлы для реализации:**
+- `NeuroConstructor.Core/core/cv_processor.py` — загрузка CV моделей, inference, feature extraction
+- `NeuroConstructor.Core/core/cv_distiller.py` — feature-level + logits-level distillation
+- `NeuroConstructor.Core/core/answer_comparator.py` — compare_teacher_student для CV (accuracy, mAP, CSSIM)
+
+---
+
+### 🎵 Этап 3: Audio — дистилляция звуковых моделей
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Teacher: Whisper / Wav2Vec2 / SpeechT                         │
+│  2. Датасет: аудиофайлы + транскрипты                             │
+│  3. Прогнать Teacher → ASR output + phoneme activations           │
+│  4. Student: smaller Whisper / Tiny Wav2Vec                       │
+│  5. Прогнать Student → сравнить WER (Word Error Rate)             │
+│  6. Distillation: logits + hidden state matching                  │
+│  7. Fine-tune Student → повторить                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🖥️ Этап 4: Real-time Desktop Vision — студент «видит» экран
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Захват видео с рабочего стола (screen capture)                │
+│     - Windows: DXGI Desktop Duplication / DirectX                 │
+│     - Захват кадров 30-60 fps                                     │
+│                                                                  │
+│  2. Teacher CV модель: realtime object detection                  │
+│     - Загружаем обученного Teacher CV                             │
+│     - Каждый кадр → bounding boxes + class labels                 │
+│     - Сохраняем как «ground truth scene understanding»            │
+│                                                                  │
+│  3. Student CV модель: lightweight detection                      │
+│     - MobileNet-SSD / YOLO-Nano / TinyViT                         │
+│     - Тот же кадр → те же bounding boxes                          │
+│     - Сравниваем: IoU, class match, confidence                    │
+│                                                                  │
+│  4. Real-time distillation                                        │
+│     - Student учится «смотреть» как Teacher                       │
+│     - Если Student пропустил объект → correction signal            │
+│     - If Student detected wrong class → cross-entropy loss          │
+│                                                                  │
+│  5. Визуализация                                                   │
+│     - Overlay: Teacher boxes (green), Student boxes (red)          │
+│     - Live comparison panel: fps, accuracy, missed objects          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Файлы для реализации:**
+- `NeuroConstructor.Core/core/screen_capture.py` — захват экрана (DXGI / mss / PIL)
+- `NeuroConstructor.Core/core/realtime_detector.py` — pipeline: frame → teacher → student → compare → overlay
+- `frontend/` — экран **Live Vision** с двумя окнами (Teacher vs Student)
+
+---
+
+### 🎨 Этап 5: Creative Tools Integration — Blender, Game Engines, Graphics Editors
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Цель: Студент помогает моделировать объекты в профессиональных   │
+│         инструментах, глядя на примеры из интернета               │
+│                                                                  │
+│  Пример: «Смоделировать кошку»                                    │
+│  ─────────────────────────────────────────────                     │
+│                                                                  │
+│  1. Пользователь просит: «Смоделировать кошку»                     │
+│                                                                  │
+│  2. Student ищет в интернете (или локальной БД)                    │
+│     - 5-10 изображений кошек (фото, 3D-рефы)                      │
+│     - 3D-модели кошек (GLTF/FBX из Sketchfab / Mixamo)             │
+│     - Текстовые описания анатомии кошки                           │
+│                                                                  │
+│  3. Multimodal Teacher анализирует                               │
+│     - CV: распознаёт позу, анатомию, текстуры                      │
+│     - LM: описывает структуру (4 лапы, хвост, шерсть...)           │
+│     - Audio: если есть — звуки кошки                              │
+│     → Teacher формирует «reference profile»                       │
+│                                                                  │
+│  4. Student генерирует вариант                                     │
+│     - Blender API: создаёт базовую 3D-модель кошки                 │
+│       - Sphere modifier → body                                   │
+│       - Cylinders → legs                                          │
+│       - Custom topology → head, ears, tail                        │
+│     - Или: Unity prefab via script                                │
+│     - Или: SVG/texture via Photoshop API                          │
+│                                                                  │
+│  5. Сравнение: Student vs Teacher reference                       │
+│     - Geometric similarity (mesh comparison)                      │
+│     - Texture similarity (feature matching)                       │
+│     - Semantic similarity (CV: same class/pose)                    │
+│                                                                  │
+│  6. If similarity < threshold → Student улучшает                   │
+│     - Regenerates with adjusted parameters                        │
+│     - Uses Teacher feedback as guidance                            │
+│     - Loop until acceptable                                        │
+│                                                                  │
+│  7. Final export                                                   │
+│     - GLTF / FBX / OBJ для импорта в игровые движки                │
+│     - Пакет материалов (PBR textures)                              │
+│     - LOD variants (for game engines)                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Файлы для реализации:**
+- `NeuroConstructor.Core/core/creative_tools/` — Blender API, Unity CLI, Photoshop API
+- `NeuroConstructor.Core/core/web_search.py` — поиск изображений/3D-моделей (DuckDuckGo / Sketchfab API)
+- `NeuroConstructor.Core/core/mesh_comparator.py` — сравнение 3D-моделей (mesh, topology, UV)
+- `NeuroConstructor.Core/core/reference_profile.py` — создание «reference profile» из multimodal sources
+
+---
+
+### 🧩 Архитектурная схема всего конвейера
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     NeuroConstructor — Full Pipeline                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────┐  │
+│  │  TEXT    │    │   IMAGE  │    │  AUDIO   │    │   3D / VIDE  │  │
+│  │  LM      │    │   CV     │    │  ASR     │    │  CREATIVE    │  │
+│  └────┬─────┘    └────┬─────┘    └────┬─────┘    └──────┬───────┘  │
+│       │               │               │                 │          │
+│       ▼               ▼               ▼                 ▼          │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                   TEACHER MODELS ( frozen )                  │  │
+│  │  GPT / Llama (text)    ·   CLIP / ViT (vision)              │  │
+│  │  Whisper (audio)       ·   Desktop Vision (screen)           │  │
+│  └────────────────────┬────────────────────────────────────────┘  │
+│                       │ Teacher НЕ ОБУЧАЕМ — эталон                 │
+│                       ▼                                            │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                  STUDENT MODELS ( trainable )                │  │
+│  │  Quantized Q4_0 · Smaller Architecture · Distilled          │  │
+│  └────────────────────┬────────────────────────────────────────┘  │
+│                       │                                            │
+│                       ▼                                            │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │            DISTILLATION TRAINER (контур)                      │  │
+│  │  1. Generate test dataset (100-150 samples)                  │  │
+│  │  2. Run Teacher → ground truth                               │  │
+│  │  3. Run Student → prediction                                 │  │
+│  │  4. Compare (similarity / accuracy / mAP)                    │  │
+│  │  5. If < threshold → fine-tune Student                       │  │
+│  │  6. Repeat until ≥ threshold (85-90%)                        │  │
+│  │  7. Export Student checkpoint                                │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │              CREATIVE TOOLS INTEGRATION                      │  │
+│  │  Blender API · Unity CLI · Photoshop · Game Engines          │  │
+│  │  Student generates 3D/texture/audio → Teacher validates       │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                   FRONTEND SCREENS                           │  │
+│  │  Models · Datasets · Benchmark · Live Vision · Creative      │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9.1 Приоритеты реализации этапов
+
+| Этап | Приоритет | Зависит от | Статус |
+|------|-----------|------------|--------|
+| **Этап 1: LM Benchmark** | 🔴 P0 | datasets ✅ | ⬜ TODO |
+| **Этап 2: CV Distillation** | 🟡 P1 | Этап 1, torch, torchvision | ⬜ TODO |
+| **Этап 3: Audio** | 🟡 P1 | Этап 1, transformers | ⬜ TODO |
+| **Этап 4: Desktop Vision** | 🟠 P2 | Этап 2, screen_capture | ⬜ TODO |
+| **Этап 5: Creative Tools** | 🟢 P3 | Этапы 1-4, Blender/Unity API | ⬜ TODO |
+
+**Сейчас фокус на Этапе 1:** лингвистический benchmark — создать тест, прогнать Teacher/Student, сравнить, дообучить.
+```
+

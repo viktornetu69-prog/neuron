@@ -28,6 +28,15 @@ except ImportError:
     ModelConverter = None
     MODEL_CONVERTER_AVAILABLE = False
 
+# Импортируем DatasetProcessor из Core
+try:
+    from dataset_processor import DatasetProcessor, ActivationAnalyzer
+    DATASET_PROCESSOR_AVAILABLE = True
+except ImportError:
+    DatasetProcessor = None
+    ActivationAnalyzer = None
+    DATASET_PROCESSOR_AVAILABLE = False
+
 
 class RESTEngine:
     """Движок для REST API"""
@@ -45,6 +54,13 @@ class RESTEngine:
         os.makedirs(self.MODELS_DIR, exist_ok=True)
         os.makedirs(os.path.join(self.MODELS_DIR, "teacher"), exist_ok=True)
         os.makedirs(os.path.join(self.MODELS_DIR, "student"), exist_ok=True)
+
+        # Инициализируем DatasetProcessor
+        self.dataset_processor = None
+        self.activation_analyzer = None
+        if DATASET_PROCESSOR_AVAILABLE and DatasetProcessor:
+            self.dataset_processor = DatasetProcessor()
+            self.activation_analyzer = ActivationAnalyzer(self.dataset_processor) if ActivationAnalyzer else None
 
     def chat(self, message: str, history: List[Dict[str, str]] = None) -> str:
         """Обработка чата"""
@@ -163,92 +179,92 @@ class RESTEngine:
         }
 
     def create_dataset(self, template_name: str = "default", count: int = 10) -> Dict[str, Any]:
-        dataset_id = str(uuid.uuid4())[:8]
-        return {
-            "dataset_id": dataset_id,
-            "manifest_path": f"datasets/{dataset_id}/manifest.json",
-        }
-
-    def analyze_dataset(self, dataset_path: str) -> Dict[str, Any]:
-        """Анализ датасета (Stage 3: Dataset Processing Pipeline)"""
-        # Проверяем есть ли manifest.json
-        manifest_path = os.path.join(dataset_path, "manifest.json") if os.path.isdir(dataset_path) else os.path.join(os.path.dirname(dataset_path), "manifest.json")
-        
-        if not os.path.exists(manifest_path):
-            # Если manifest нет, возвращаем заглушку
-            return {
-                "success": True,
-                "dataset_info": {
-                    "dataset_id": str(uuid.uuid4())[:8],
-                    "template_name": "custom",
-                    "kind": "text",
-                    "count": 0,
-                    "created_at": datetime.now().isoformat(),
-                    "status": "ready",
-                    "params": {},
-                    "example_count": 0,
-                },
-                "examples_loaded": 0,
-                "preprocessing_steps": ["Загрузка данных", "Проверка структуры", "Валидация манифеста"],
-                "quality_score": 1.0,
-            }
-
-        try:
-            with open(manifest_path, 'r') as f:
-                manifest = json.load(f)
-
-            dataset_id = manifest.get("dataset_id", str(uuid.uuid4())[:8])
-            template_name = manifest.get("template_name", "unknown")
-            kind = manifest.get("kind", "text")
-            count = manifest.get("count", 0)
-            created_at = manifest.get("created_at", datetime.now().isoformat())
-            status = manifest.get("status", "ready")
-
-            # Считываем примеры
-            dataset_dir = os.path.dirname(manifest_path)
-            example_files = sorted([
-                f for f in os.listdir(dataset_dir)
-                if f.startswith('example_') and f.endswith('.json')
-            ])
-
-            examples_loaded = len(example_files)
-            quality_score = min(1.0, examples_loaded / max(1, count)) if count > 0 else 1.0
-
-            return {
-                "success": True,
-                "dataset_info": {
-                    "dataset_id": dataset_id,
-                    "template_name": template_name,
-                    "kind": kind,
-                    "count": count,
-                    "created_at": created_at,
-                    "status": status,
-                    "params": manifest.get("params", {}),
-                    "example_count": examples_loaded,
-                },
-                "examples_loaded": examples_loaded,
-                "preprocessing_steps": [
-                    "Загрузка данных",
-                    "Проверка структуры",
-                    "Валидация манифеста",
-                    "Проверка качества",
-                ],
-                "quality_score": round(quality_score, 4),
-            }
-        except Exception as e:
+        """Создание датасета из шаблона — делегирует DatasetProcessor"""
+        if not self.dataset_processor:
             return {
                 "success": False,
-                "error": str(e),
+                "error": "DatasetProcessor not available",
+                "dataset_id": str(uuid.uuid4())[:8],
+                "manifest_path": f"datasets/{str(uuid.uuid4())[:8]}/manifest.json",
             }
+        return self.dataset_processor.create_from_template(
+            template_name=template_name,
+            count=count,
+        )
+
+    def analyze_dataset(self, dataset_path: str) -> Dict[str, Any]:
+        """Анализ датасета — делегирует DatasetProcessor"""
+        if not self.dataset_processor:
+            # Fallback: legacy inline logic
+            manifest_path = os.path.join(dataset_path, "manifest.json") if os.path.isdir(dataset_path) else os.path.join(os.path.dirname(dataset_path), "manifest.json")
+            if not os.path.exists(manifest_path):
+                return {
+                    "success": True,
+                    "dataset_info": {
+                        "dataset_id": str(uuid.uuid4())[:8],
+                        "template_name": "custom",
+                        "kind": "text",
+                        "count": 0,
+                        "created_at": datetime.now().isoformat(),
+                        "status": "ready",
+                        "params": {},
+                        "example_count": 0,
+                    },
+                    "examples_loaded": 0,
+                    "preprocessing_steps": ["Загрузка данных", "Проверка структуры", "Валидация манифеста"],
+                    "quality_score": 1.0,
+                }
+            try:
+                with open(manifest_path, 'r') as f:
+                    manifest = json.load(f)
+                dataset_dir = os.path.dirname(manifest_path)
+                example_files = sorted([f for f in os.listdir(dataset_dir) if f.startswith('example_') and f.endswith('.json')])
+                examples_loaded = len(example_files)
+                count = manifest.get("count", 0)
+                quality_score = min(1.0, examples_loaded / max(1, count)) if count > 0 else 1.0
+                return {
+                    "success": True,
+                    "dataset_info": {
+                        "dataset_id": manifest.get("dataset_id", str(uuid.uuid4())[:8]),
+                        "template_name": manifest.get("template_name", "unknown"),
+                        "kind": manifest.get("kind", "text"),
+                        "count": count,
+                        "created_at": manifest.get("created_at", datetime.now().isoformat()),
+                        "status": manifest.get("status", "ready"),
+                        "params": manifest.get("params", {}),
+                        "example_count": examples_loaded,
+                    },
+                    "examples_loaded": examples_loaded,
+                    "preprocessing_steps": ["Загрузка данных", "Проверка структуры", "Валидация манифеста", "Проверка качества"],
+                    "quality_score": round(quality_score, 4),
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        return self.dataset_processor.process_dataset(dataset_path)
 
     def get_dataset_preview(self, dataset_path: str, rows: int = 5) -> Dict[str, Any]:
         """Получение предварительного просмотра датасета"""
+        # Если это dataset_id — используем DatasetProcessor
+        if self.dataset_processor:
+            datasets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "datasets")
+            dataset_id = os.path.basename(dataset_path) if not os.path.isdir(dataset_path) else dataset_path
+            # Check if it's a direct path or dataset_id
+            if os.path.isdir(dataset_path):
+                dataset_id = os.path.basename(dataset_path)
+            else:
+                dataset_id = dataset_path
+
+            # Try to find dataset
+            result = self.dataset_processor.get_dataset_rows(dataset_id, limit=rows)
+            if result.get("success"):
+                return {"rows": result.get("rows", [])}
+
+        # Fallback: legacy inline logic
         try:
-            # Ищем manifest.json
             manifest_path = os.path.join(dataset_path, "manifest.json") if os.path.isdir(dataset_path) else os.path.join(os.path.dirname(dataset_path), "manifest.json")
 
             if not os.path.exists(manifest_path):
-                # Проверяем сам файл как JSON/CSV
                 if os.path.exists(dataset_path):
                     file_ext = os.path.splitext(dataset_path)[1].lower()
                     if file_ext == '.json':
@@ -266,10 +282,8 @@ class RESTEngine:
                                     break
                                 preview.append(dict(row))
                             return {"rows": preview}
-
                 return {"rows": []}
 
-            # Если есть manifest, читаем примеры
             dataset_dir = os.path.dirname(manifest_path)
             example_files = sorted([
                 f for f in os.listdir(dataset_dir)
@@ -289,20 +303,17 @@ class RESTEngine:
             return {"rows": [], "error": str(e)}
 
     def analyze_activations(self, dataset_id: str, model_path: str, layer_names: List[str] = None) -> Dict[str, Any]:
-        """Анализ активаций нейронной сети"""
-        return {
-            "success": True,
-            "dataset_id": dataset_id,
-            "model_path": model_path,
-            "layers_analyzed": layer_names or ["all"],
-            "activation_statistics": {
-                "total_neurons": 0,
-                "average_activation": 0.0,
-                "sparsity_percentage": 0.0,
-                "layer_details": {},
-            },
-            "note": "Activation analysis requires actual model inference.",
-        }
+        """Анализ активаций — делегирует ActivationAnalyzer"""
+        if not self.activation_analyzer:
+            return {
+                "success": False,
+                "error": "ActivationAnalyzer not available",
+            }
+        return self.activation_analyzer.analyze_activations(
+            dataset_id=dataset_id,
+            model_path=model_path,
+            layer_names=layer_names,
+        )
 
     def list_model_files(self, directory: str = "teacher") -> Dict[str, Any]:
         """Получить список файлов в директории моделей"""
