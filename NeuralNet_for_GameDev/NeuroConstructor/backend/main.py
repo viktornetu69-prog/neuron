@@ -305,97 +305,96 @@ async def load_teacher_model(request: LoadTeacherRequest):
         logger.error(f"Load teacher error: {e}")
         return LoadTeacherResponse(status="error", error_message=str(e))
 
-@app.post("/api/models/load-all", response_model=DualModelLoadResponse)
-async def load_all_models(request: DualModelLoadRequest):
-    """Загрузка Teacher и Student одновременно с настраиваемым GPU/SPU размещением"""
-    if not server_state["engine"]:
-        raise HTTPException(status_code=503, detail="Engine not initialized")
+# ============================================
+# Model Load endpoints (individual + combined)
+# ============================================
 
+@app.post("/api/models/load/teacher")
+async def load_teacher_model_only():
+    """Загрузить ТОЛЬКО Teacher модель"""
     try:
-        engine = server_state["engine"]
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+        if not LLAMA_CPP_AVAILABLE:
+            return {"success": False, "error": "llama-cpp-python not installed"}
 
-        # ===================== ЗАГРУЗКА TEACHER =====================
-        teacher_config = request.teacher
-        teacher_backend = teacher_config.backend.upper()
-        teacher_gpu_layers = teacher_config.gpu_layers
-
-        # Ищем Teacher модель в директории
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(backend_dir)
-        teacher_dir = os.path.join(project_root, "NeuroConstructor.Core", "models", "teacher")
-
+        teacher_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "teacher")
         teacher_files = [f for f in os.listdir(teacher_dir) if f.endswith('.gguf')] if os.path.exists(teacher_dir) else []
-
         if not teacher_files:
-            return DualModelLoadResponse(
-                success=False,
-                error_message=f"No Teacher model found in {teacher_dir}",
-                timestamp=datetime.now().isoformat(),
-            )
+            return {"success": False, "error": "No Teacher models found"}
 
         teacher_file = teacher_files[0]
         teacher_path = os.path.join(teacher_dir, teacher_file)
+        engine = LlamaCppEngine(model_path=teacher_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
 
-        # Загружаем Teacher
-        teacher_result = engine.load_teacher_model(teacher_path)
-        teacher_status = teacher_result.get("status", "unknown")
-        teacher_loaded = teacher_status == "success" or teacher_status == "loaded"
+        server_state["engine"] = engine
+        server_state["model_loaded"] = True
+        server_state["model_path"] = teacher_path
+        server_state["model_info"] = {"model_type": "teacher", "filename": teacher_file}
+        return {"success": True, "teacher_status": "loaded", "student_status": "not_loaded", "teacher_path": teacher_path}
+    except Exception as e:
+        logger.error(f"Load teacher error: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
-        logger.info(f"Teacher loaded: {teacher_file}, backend: {teacher_backend}, gpu_layers: {teacher_gpu_layers}")
+@app.post("/api/models/load/student")
+async def load_student_model_only():
+    """Загрузить ТОЛЬКО Student модель"""
+    try:
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+        if not LLAMA_CPP_AVAILABLE:
+            return {"success": False, "error": "llama-cpp-python not installed"}
 
-        # ===================== ЗАГРУЗКА STUDENT =====================
-        student_config = request.student
-        student_backend = student_config.backend.upper()
-        student_gpu_layers = student_config.gpu_layers
-
-        student_dir_path = os.path.join(project_root, "NeuroConstructor.Core", "models", "student")
-
-        # Ищем Student модель
-        student_files = [f for f in os.listdir(student_dir_path) if f.endswith('.gguf')] if os.path.exists(student_dir_path) else []
-
+        student_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "student")
+        student_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')] if os.path.exists(student_dir) else []
         if not student_files:
-            # Если Student не найден, пытаемся создать из Teacher
-            logger.info("Student not found, creating from Teacher...")
-            create_result = engine.create_student_model(teacher_path)
-            if create_result.get("status") != "success":
-                return DualModelLoadResponse(
-                    success=False,
-                    teacher_status=teacher_status,
-                    student_status="creation_failed",
-                    teacher_config=f"backend={teacher_backend}, gpu_layers={teacher_gpu_layers}",
-                    student_config=f"backend={student_backend}, gpu_layers={student_gpu_layers}",
-                    error_message=f"Failed to create Student model: {create_result.get('error', 'unknown')}",
-                    timestamp=datetime.now().isoformat(),
-                )
+            return {"success": False, "error": "No Student models found"}
 
-        # Если Student найден, загружаем его
-        student_file = student_files[0] if student_files else None
-        student_path = os.path.join(student_dir_path, student_file) if student_file else None
+        student_file = student_files[0]
+        student_path = os.path.join(student_dir, student_file)
+        engine = LlamaCppEngine(model_path=student_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
 
-        if student_path and os.path.exists(student_path):
-            # TODO: Загрузить Student с конфигурацией GPU/SPU
-            logger.info(f"Student loaded: {student_file}, backend: {student_backend}, gpu_layers: {student_gpu_layers}")
-            student_status = "loaded"
-        else:
-            logger.info("Student model not found, not using Teacher as fallback")
-            student_status = "not_loaded"
+        server_state["engine"] = engine
+        server_state["model_loaded"] = True
+        server_state["model_path"] = student_path
+        server_state["model_info"] = {"model_type": "student", "filename": student_file}
+        return {"success": True, "teacher_status": "not_loaded", "student_status": "loaded", "student_path": student_path}
+    except Exception as e:
+        logger.error(f"Load student error: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
-        return DualModelLoadResponse(
-            success=True,
-            teacher_status=teacher_status,
-            student_status=student_status,
-            teacher_config=f"backend={teacher_backend}, gpu_layers={teacher_gpu_layers}",
-            student_config=f"backend={student_backend}, gpu_layers={student_gpu_layers}",
-            timestamp=datetime.now().isoformat(),
-        )
+@app.post("/api/models/load-all")
+async def load_both_models():
+    """Загрузить Teacher И Student одновременно"""
+    try:
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+        if not LLAMA_CPP_AVAILABLE:
+            return {"success": False, "error": "llama-cpp-python not installed"}
 
+        teacher_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "teacher")
+        teacher_files = [f for f in os.listdir(teacher_dir) if f.endswith('.gguf')] if os.path.exists(teacher_dir) else []
+        if teacher_files:
+            teacher_file = teacher_files[0]
+            teacher_path = os.path.join(teacher_dir, teacher_file)
+            engine = LlamaCppEngine(model_path=teacher_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
+            server_state["engine"] = engine
+            server_state["model_loaded"] = True
+            server_state["model_path"] = teacher_path
+            server_state["model_info"] = {"model_type": "teacher", "filename": teacher_file}
+
+        student_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models", "student")
+        student_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')] if os.path.exists(student_dir) else []
+        if student_files:
+            student_file = student_files[0]
+            student_path = os.path.join(student_dir, student_file)
+            engine = LlamaCppEngine(model_path=student_path, n_gpu_layers=0, n_threads=min(8, os.cpu_count() or 4))
+            server_state["engine"] = engine
+            server_state["model_loaded"] = True
+            server_state["model_path"] = student_path
+            server_state["model_info"] = {"model_type": "student", "filename": student_file}
+
+        return {"success": True, "teacher_status": "loaded" if teacher_files else "not_loaded", "student_status": "loaded" if student_files else "not_loaded"}
     except Exception as e:
         logger.error(f"Load all models error: {e}", exc_info=True)
-        return DualModelLoadResponse(
-            success=False,
-            error_message=str(e),
-            timestamp=datetime.now().isoformat(),
-        )
+        return {"success": False, "error": str(e)}
 
 @app.post("/api/models/student", response_model=CreateStudentResponse)
 async def create_student_model(request: CreateStudentRequest):
