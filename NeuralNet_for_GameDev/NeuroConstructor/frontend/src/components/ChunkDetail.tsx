@@ -1,11 +1,11 @@
 /**
- * ChunkDetail — крупный план одного чанка с нейронами и входящими/исходящими связями
- *
- * При клике на чанк в основной модели — показывается детальный вид:
- * - Нейроны чанка (сетка)
- * - Входящие связи из предыдущего слоя (соседний чанк того же слоя)
- * - Исходящие связи в следующий слой (соседний чанк следующего слоя)
- * - Соседние чанки/слои НЕ показываются
+ * ChunkDetail — визуальная схема чанка с нейронами-кружками и связями
+ * 
+ * При клике на чанк в основной модели:
+ * - Нейроны чанка в виде сетки кружков
+ * - Линии связей между нейронами внутри чанка
+ * - Входящие/исходящие связи с соседними чанками
+ * - Подпись слоя и количество связей
  */
 
 import React, { memo } from 'react';
@@ -20,18 +20,51 @@ interface ChunkData {
   size: number;
 }
 
+interface ConnectionNeighbor {
+  startNeuron: number;
+  endNeuron: number;
+  prevChunkIndex?: number;
+  nextChunkIndex?: number;
+}
+
 interface ChunkDetailProps {
   chunk: ChunkData;
   layerName: string;
   layerColor: string;
   layerColorLight: string;
   onBack: () => void;
-  incomingNeighbors: Array<{ startNeuron: number; endNeuron: number; prevChunkIndex: number }>;
-  outgoingNeighbors: Array<{ startNeuron: number; endNeuron: number; nextChunkIndex: number }>;
+  incomingNeighbors: ConnectionNeighbor[];
+  outgoingNeighbors: ConnectionNeighbor[];
 }
 
-const NEURON_SIZE = 8;
+const NEURON_RADIUS = 5;
 const NEURON_GAP = 3;
+
+// Детерминированный рандом для связей
+function seededRandom(a: number, b: number): number {
+  const x = Math.sin(a * 9301 + b * 49297) * 49297;
+  return x - Math.floor(x);
+}
+
+function generateConnections(
+  fromStart: number,
+  fromEnd: number,
+  toStart: number,
+  toEnd: number,
+  maxConnections: number
+): Array<[number, number]> {
+  const connections: Array<[number, number]> = [];
+  const count = Math.min(maxConnections, (fromEnd - fromStart + 1) * (toEnd - toStart + 1));
+  
+  for (let i = 0; i < count; i++) {
+    const fromIdx = fromStart + Math.floor(seededRandom(i, 1000 + fromStart) * (fromEnd - fromStart + 1));
+    const toIdx = toStart + Math.floor(seededRandom(i, 2000 + toStart) * (toEnd - toStart + 1));
+    if (fromIdx >= fromStart && fromIdx <= fromEnd && toIdx >= toStart && toIdx <= toEnd) {
+      connections.push([fromIdx - fromStart, toIdx - toStart]);
+    }
+  }
+  return connections;
+}
 
 const ChunkDetail: React.FC<ChunkDetailProps> = memo(({
   chunk,
@@ -42,31 +75,80 @@ const ChunkDetail: React.FC<ChunkDetailProps> = memo(({
   incomingNeighbors,
   outgoingNeighbors,
 }) => {
-  // Вычисляем количество нейронов в чанке
   const neuronCount = chunk.endNeuron - chunk.startNeuron + 1;
-  // Сетка нейронов: автоматическое определение количества столбцов
-  const cols = Math.ceil(Math.sqrt(neuronCount));
-  const rows = Math.ceil(neuronCount / cols);
-  const gridSize = cols * (NEURON_SIZE + NEURON_GAP) + NEURON_GAP;
+  // Показываем максимум 100 нейронов для производительности
+  const displayCount = Math.min(neuronCount, 100);
+  const cols = Math.min(Math.ceil(Math.sqrt(displayCount)), 10);
+  const rows = Math.min(Math.ceil(displayCount / cols), 10);
+  
+  // Позиции нейронов
+  const positions: Array<{x: number; y: number; idx: number}> = [];
+  for (let i = 0; i < displayCount; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    positions.push({
+      x: col * (NEURON_RADIUS * 2 + NEURON_GAP),
+      y: row * (NEURON_RADIUS * 2 + NEURON_GAP),
+      idx: i,
+    });
+  }
+
+  // Внутренние связи
+  const internalConns: Array<[number, number]> = [];
+  for (let i = 0; i < displayCount && internalConns.length < 80; i++) {
+    for (let j = i + 1; j < displayCount && internalConns.length < 80; j++) {
+      if (seededRandom(i, j) < 0.25) {
+        internalConns.push([i, j]);
+      }
+    }
+  }
+
+  // Входящие связи
+  const incomingConns = incomingNeighbors.length > 0
+    ? generateConnections(
+        incomingNeighbors[0].startNeuron,
+        incomingNeighbors[0].endNeuron,
+        chunk.startNeuron,
+        chunk.endNeuron,
+        12
+      )
+    : [];
+
+  // Исходящие связи
+  const outgoingConns = outgoingNeighbors.length > 0
+    ? generateConnections(
+        chunk.startNeuron,
+        chunk.endNeuron,
+        outgoingNeighbors[0].startNeuron,
+        outgoingNeighbors[0].endNeuron,
+        12
+      )
+    : [];
+
+  // Размеры
+  const gridWidth = cols * (NEURON_RADIUS * 2 + NEURON_GAP);
+  const gridHeight = rows * (NEURON_RADIUS * 2 + NEURON_GAP);
+  const gridX = -gridWidth / 2;
+  const gridY = -30;
 
   return (
     <g>
-      {/* Фон — тёмная подложка */}
+      {/* Фон */}
       <rect
-        x="-350"
-        y="-200"
-        width="700"
-        height="400"
-        rx="12"
-        fill="rgba(10, 10, 15, 0.95)"
+        x="-450"
+        y="-180"
+        width="900"
+        height="360"
+        rx="16"
+        fill="rgba(10, 10, 15, 0.97)"
         stroke={layerColor}
         strokeWidth="2"
       />
 
       {/* Заголовок */}
       <text
-        x="0"
-        y="-170"
+        x="-380"
+        y="-150"
         textAnchor="middle"
         fill="white"
         fontSize="14"
@@ -75,196 +157,178 @@ const ChunkDetail: React.FC<ChunkDetailProps> = memo(({
         {layerName}
       </text>
       <text
-        x="0"
-        y="-152"
+        x="-380"
+        y="-134"
         textAnchor="middle"
         fill="#8888aa"
         fontSize="10"
       >
-        Чанк {chunk.chunkIndex + 1}: нейроны {chunk.startNeuron}–{chunk.endNeuron} ({neuronCount} нейронов)
+        Чанк {chunk.chunkIndex + 1} | Нейроны {chunk.startNeuron}–{chunk.endNeuron}
       </text>
 
       {/* Кнопка закрытия */}
-      <g
-        onClick={onBack}
-        style={{ cursor: 'pointer' }}
-      >
+      <g onClick={onBack} style={{ cursor: 'pointer' }}>
         <rect
-          x="280"
-          y="-185"
-          width="24"
-          height="24"
-          rx="4"
+          x="400"
+          y="-165"
+          width="28"
+          height="28"
+          rx="6"
           fill="#1a1a2e"
           stroke="#3a3a4e"
-          strokeWidth="1"
+          strokeWidth="1.5"
         />
         <text
-          x="292"
-          y="-167"
+          x="414"
+          y="-145"
           textAnchor="middle"
           fill="#8888aa"
-          fontSize="12"
-          fontWeight="600"
+          fontSize="14"
+          fontWeight="700"
         >
           ✕
         </text>
       </g>
 
-      {/* Входящие связи — из предыдущего слоя */}
+      {/* ===== ВХОДЯЩИЕ СВЯЗИ ===== */}
       {incomingNeighbors.length > 0 && (
-        <>
+        <g>
           <text
-            x="-300"
-            y="-80"
+            x="-320"
+            y={gridY - 50}
             textAnchor="middle"
-            fill="#8888aa"
-            fontSize="9"
+            fill="#10b981"
+            fontSize="10"
             fontWeight="600"
           >
-            ← Входящие
+            ← {incomingConns.length} входящих
           </text>
-          {incomingNeighbors.map((nb, idx) => {
-            const y = -60 + idx * 30;
-            const opacity = 0.4;
+          {/* Нейроны предыдущего чанка */}
+          {[...Array(6)].map((_, i) => (
+            <circle
+              key={`prev-${i}`}
+              cx={-400 + i * 22}
+              cy={gridY - 30}
+              r={NEURON_RADIUS}
+              fill="#10b981"
+              opacity="0.4"
+              stroke="#10b981"
+              strokeWidth="1"
+            />
+          ))}
+          {/* Линии связей */}
+          {incomingConns.map((conn, idx) => {
+            const fromX = -400 + (idx % 6) * 22;
+            const fromY = gridY - 30;
+            const toPos = positions[Math.min(conn[1], positions.length - 1)];
+            if (!toPos) return null;
             return (
-              <g key={`in-${idx}`}>
-                <rect
-                  x="-340"
-                  y={y - 8}
-                  width="40"
-                  height="16"
-                  rx="3"
-                  fill={layerColor}
-                  opacity={opacity}
-                  stroke={layerColorLight}
-                  strokeWidth="1"
-                />
-                <text
-                  x="-320"
-                  y={y + 3}
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize="7"
-                  fontWeight="500"
-                >
-                  Ч{nb.prevChunkIndex + 1}
-                </text>
-                {/* Линия связи */}
-                <line
-                  x1="-300"
-                  y={y + 3}
-                  x2="-200"
-                  y2={y + 3}
-                  stroke={layerColor}
-                  strokeWidth="0.5"
-                  opacity={0.3}
-                  strokeDasharray="3,2"
-                />
-              </g>
-            );
-          })}
-        </>
-      )}
-
-      {/* Нейроны чанка — центральная сетка */}
-      <text
-        x="0"
-        y="-80"
-        textAnchor="middle"
-        fill={layerColor}
-        fontSize="10"
-        fontWeight="600"
-      >
-        Нейроны чанка
-      </text>
-      <g
-        transform={`translate(${-gridSize / 2}, 0)`}
-      >
-        {[...Array(rows)].map((_, row) =>
-          [...Array(cols)].map((_, col) => {
-            const idx = row * cols + col;
-            if (idx >= neuronCount) return null;
-            return (
-              <circle
-                key={`n-${idx}`}
-                cx={col * (NEURON_SIZE + NEURON_GAP)}
-                cy={row * (NEURON_SIZE + NEURON_GAP)}
-                r={NEURON_SIZE / 2}
-                fill={layerColor}
-                opacity={0.3 + (idx / Math.max(1, neuronCount - 1)) * 0.5}
-                stroke={layerColorLight}
+              <line
+                key={`inc-${idx}`}
+                x1={fromX}
+                y1={fromY}
+                x2={toPos.x + NEURON_RADIUS}
+                y2={toPos.y}
+                stroke="#10b981"
                 strokeWidth="0.5"
+                opacity="0.25"
               />
             );
-          })
-        )}
-      </g>
-
-      {/* Исходящие связи — в следующий слой */}
-      {outgoingNeighbors.length > 0 && (
-        <>
-          <text
-            x="300"
-            y="-80"
-            textAnchor="middle"
-            fill="#8888aa"
-            fontSize="9"
-            fontWeight="600"
-          >
-            Исходящие →
-          </text>
-          {outgoingNeighbors.map((nb, idx) => {
-            const y = -60 + idx * 30;
-            return (
-              <g key={`out-${idx}`}>
-                {/* Линия связи */}
-                <line
-                  x1="200"
-                  y={y + 3}
-                  x2="300"
-                  y2={y + 3}
-                  stroke={layerColor}
-                  strokeWidth="0.5"
-                  opacity={0.3}
-                  strokeDasharray="3,2"
-                />
-                <rect
-                  x="300"
-                  y={y - 8}
-                  width="40"
-                  height="16"
-                  rx="3"
-                  fill={layerColor}
-                  opacity="0.4"
-                  stroke={layerColorLight}
-                  strokeWidth="1"
-                />
-                <text
-                  x="320"
-                  y={y + 3}
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize="7"
-                  fontWeight="500"
-                >
-                  Ч{nb.nextChunkIndex + 1}
-                </text>
-              </g>
-            );
           })}
-        </>
+        </g>
       )}
 
-      {/* Статистика внизу */}
+      {/* ===== ОСНОВНАЯ СЕТКА НЕЙРОНОВ ===== */}
+      {/* Внутренние связи — линии */}
+      {internalConns.map(([a, b], idx) => {
+        const from = positions[a];
+        const to = positions[b];
+        if (!from || !to) return null;
+        return (
+          <line
+            key={`int-${idx}`}
+            x1={from.x + NEURON_RADIUS}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y + NEURON_RADIUS}
+            stroke={layerColor}
+            strokeWidth="0.4"
+            opacity="0.12"
+          />
+        );
+      })}
+      
+      {/* Нейроны — кружки */}
+      {positions.map((pos, idx) => (
+        <circle
+          key={`n-${idx}`}
+          cx={pos.x}
+          cy={pos.y}
+          r={NEURON_RADIUS}
+          fill={layerColor}
+          opacity={0.3 + (idx / Math.max(1, displayCount - 1)) * 0.5}
+          stroke={layerColorLight}
+          strokeWidth="1"
+        />
+      ))}
+
+      {/* ===== ИСХОДЯЩИЕ СВЯЗИ ===== */}
+      {outgoingNeighbors.length > 0 && (
+        <g>
+          <text
+            x="320"
+            y={gridY - 50}
+            textAnchor="middle"
+            fill="#f97316"
+            fontSize="10"
+            fontWeight="600"
+          >
+            {outgoingConns.length} исходящих →
+          </text>
+          {/* Линии связей */}
+          {outgoingConns.map((conn, idx) => {
+            const fromPos = positions[Math.min(conn[0], positions.length - 1)];
+            if (!fromPos) return null;
+            const toX = 400 + (idx % 6) * 22;
+            const toY = gridY - 30;
+            return (
+              <line
+                key={`out-${idx}`}
+                x1={fromPos.x + NEURON_RADIUS}
+                y1={fromPos.y}
+                x2={toX}
+                y2={toY}
+                stroke="#f97316"
+                strokeWidth="0.5"
+                opacity="0.25"
+              />
+            );
+          })}
+          {/* Нейроны следующего чанка */}
+          {[...Array(6)].map((_, i) => (
+            <circle
+              key={`next-${i}`}
+              cx={400 + i * 22}
+              cy={gridY - 30}
+              r={NEURON_RADIUS}
+              fill="#f97316"
+              opacity="0.4"
+              stroke="#f97316"
+              strokeWidth="1"
+            />
+          ))}
+        </g>
+      )}
+
+      {/* Статистика */}
       <text
         x="0"
         y="140"
         textAnchor="middle"
         fill="#666688"
-        fontSize="8"
+        fontSize="9"
       >
-        Всего в слое: {chunk.size} нейронов • {Math.ceil(chunk.size / 64)} чанков
+        {displayCount} нейронов • {internalConns.length} внутр. • {incomingConns.length} вход. • {outgoingConns.length} исх.
       </text>
     </g>
   );
