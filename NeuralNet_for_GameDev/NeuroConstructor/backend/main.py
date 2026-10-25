@@ -377,8 +377,8 @@ async def load_all_models(request: DualModelLoadRequest):
             logger.info(f"Student loaded: {student_file}, backend: {student_backend}, gpu_layers: {student_gpu_layers}")
             student_status = "loaded"
         else:
-            logger.info("Student model not found, using Teacher as fallback")
-            student_status = "fallback_to_teacher"
+            logger.info("Student model not found, not using Teacher as fallback")
+            student_status = "not_loaded"
 
         return DualModelLoadResponse(
             success=True,

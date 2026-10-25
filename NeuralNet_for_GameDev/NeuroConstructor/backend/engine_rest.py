@@ -855,19 +855,17 @@ class RESTEngine:
             }
 
     def _chat_human_student(self, message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
-        """Человек ↔ Студент — используем Teacher как fallback пока нет Student GGUF"""
-        # Fallback на Teacher если Student не загружен
-        engine = self.student_engine or self.teacher_engine
-        if not engine:
+        """Человек ↔ Студент — используем ТОЛЬКО Student модель, без fallback"""
+        if not self.student_engine:
             return {
                 "success": False,
-                "error": "No model loaded",
+                "error": "Student model not loaded",
                 "responses": [],
             }
 
         try:
             prompt = self._build_chat_prompt(history, message)
-            result = engine.model.create_completion(
+            result = self.student_engine.model.create_completion(
                 prompt=prompt,
                 max_tokens=512,
                 temperature=0.7,
@@ -912,9 +910,18 @@ class RESTEngine:
             )
             teacher_text = teacher_result.get("choices", [{}])[0].get("text", "")
 
-            # Student ответ (fallback на Teacher)
-            student_engine = self.student_engine or self.teacher_engine
-            student_result = student_engine.model.create_completion(
+            # Student ответ — ТОЛЬКО Student модель
+            if not self.student_engine:
+                return {
+                    "success": False,
+                    "error": "Student model not loaded for comparison",
+                    "responses": [
+                        {"role": "human", "content": message, "timestamp": datetime.now().isoformat()},
+                        {"role": "teacher", "content": teacher_text, "timestamp": datetime.now().isoformat()},
+                    ],
+                }
+
+            student_result = self.student_engine.model.create_completion(
                 prompt=teacher_prompt,
                 max_tokens=256,
                 temperature=0.5,
@@ -962,10 +969,16 @@ class RESTEngine:
             )
             teacher_text = teacher_result.get("choices", [{}])[0].get("text", "")
 
-            # Student отвечает (fallback на Teacher)
-            student_engine = self.student_engine or self.teacher_engine
+            # Student ответ — ТОЛЬКО Student модель
+            if not self.student_engine:
+                return {
+                    "success": False,
+                    "error": "Student model not loaded for dialogue",
+                    "responses": [],
+                }
+
             student_prompt = f"Сжати отвечай на тему: {message}. Твой ответ:"
-            student_result = student_engine.model.create_completion(
+            student_result = self.student_engine.model.create_completion(
                 prompt=student_prompt,
                 max_tokens=256,
                 temperature=0.5,

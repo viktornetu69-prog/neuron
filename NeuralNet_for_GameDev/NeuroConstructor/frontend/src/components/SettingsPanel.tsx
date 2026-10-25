@@ -65,9 +65,6 @@ export interface AppSettings {
   benchmarkOutputDir: string;
   benchmarkQualityThreshold: number; // 0.0-1.0
   benchmarkFineTuningTrigger: boolean;
-
-  // System
-  autoFallback: boolean; // teacher fallback for student
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -119,9 +116,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   benchmarkOutputDir: 'benchmarks',
   benchmarkQualityThreshold: 0.85,
   benchmarkFineTuningTrigger: true,
-
-  // System
-  autoFallback: true,
 };
 
 const STORAGE_KEY = 'neuroconstructor_settings_v2';
@@ -597,14 +591,6 @@ function StudentTab({ settings, setSettings }: { settings: AppSettings; setSetti
             <option value="Q6_0">Q6_0</option>
             <option value="Q8_0">Q8_0</option>
           </select>
-        </SettingRow>
-      </Section>
-      <Section title="Поведение" icon="⚙️">
-        <SettingRow label="Авто-резервирование" description="Если Student не загружен → Teacher">
-          <Toggle
-            value={settings.autoFallback}
-            onChange={(val) => setSettings(prev => ({ ...prev, autoFallback: val }))}
-          />
         </SettingRow>
       </Section>
       <button
