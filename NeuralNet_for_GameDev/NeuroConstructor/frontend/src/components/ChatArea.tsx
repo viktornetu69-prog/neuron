@@ -2,6 +2,18 @@ import { KeyboardEvent, useState, useCallback, useRef } from 'react';
 import { Toast, ContextMenu } from './Toast';
 import { ChatMode, ChatMessage } from '@/types';
 
+const STORAGE_KEY = 'neuroconstructor_settings_v2';
+
+// Helper: read settings from localStorage
+function getSettings() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface ChatAreaProps {
   messages: ChatMessage[];
   inputText: string;
@@ -81,18 +93,14 @@ export function ChatArea({
 
   // Определяем placeholder в зависимости от режима
   const getPlaceholder = () => {
-    switch (chatMode) {
-      case 'human-teacher':
-        return 'Спросите учителя...';
-      case 'human-student':
-        return 'Спросите студента...';
-      case 'human-teacher-student':
-        return 'Задайте вопрос для сравнения ответов...';
-      case 'teacher-student':
-        return 'Введите тему для обсуждения учителя и студента...';
-      default:
-        return 'Введите сообщение...';
-    }
+    const settings = getSettings();
+    const defaults: Record<ChatMode, string> = {
+      'human-teacher': 'Спросите учителя...',
+      'human-student': 'Спросите студента...',
+      'human-teacher-student': 'Задайте вопрос для сравнения ответов...',
+      'teacher-student': 'Введите тему для обсуждения учителя и студента...',
+    };
+    return settings?.chatPlaceholders?.[chatMode] || defaults[chatMode];
   };
 
   // Определяем заголовок режима
@@ -111,32 +119,26 @@ export function ChatArea({
     }
   };
 
-  // Определяем иконку роли
+  // Определяем иконку роли из настроек
   const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'human':
-        return '👤';
-      case 'teacher':
-        return '👨‍🏫';
-      case 'student':
-        return '🎓';
-      default:
-        return '💬';
-    }
+    const settings = getSettings();
+    const defaults: Record<string, string> = {
+      human: '👤',
+      teacher: '👨‍🏫',
+      student: '🎓',
+    };
+    return settings?.chatRoleIcons?.[role] || defaults[role] || '💬';
   };
 
-  // Определяем цвет роли
+  // Определяем цвет роли из настроек
   const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'human':
-        return '#8888aa';
-      case 'teacher':
-        return '#4caf50';
-      case 'student':
-        return '#7c6ff7';
-      default:
-        return '#8888aa';
-    }
+    const settings = getSettings();
+    const defaults: Record<string, string> = {
+      human: '#8888aa',
+      teacher: '#4caf50',
+      student: '#7c6ff7',
+    };
+    return settings?.chatRoleColors?.[role] || defaults[role] || '#8888aa';
   };
 
   return (

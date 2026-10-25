@@ -309,11 +309,7 @@ export default function App() {
               isServerAvailable={state.isServerAvailable}
             />
           ) : state.panel === 'settings' ? (
-            <SettingsPanel
-              isTeacherLoaded={state.isTeacherLoaded}
-              isStudentAvailable={state.isStudentAvailable}
-              isServerAvailable={state.isServerAvailable}
-            />
+            <SettingsPanel />
           ) : (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8888aa' }}>
               <div style={{ textAlign: 'center' }}>

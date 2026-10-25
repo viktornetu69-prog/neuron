@@ -1,21 +1,52 @@
 import axios from 'axios';
 import { Message, ChatResponse, ModelInfo, TeacherModel, StudentModel, ModelFile } from '@/types';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const STORAGE_KEY = 'neuroconstructor_settings_v2';
 
-const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 300000, // 5 минут для LLM операций (генерация токенов может быть долгой)
+// Helper: get current API URL from settings
+function getApiUrl(): string {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const settings = JSON.parse(saved);
+      return settings.serverUrl || settings.apiUrl || 'http://127.0.0.1:8000';
+    }
+  } catch {
+    // Ignore errors
+  }
+  return 'http://127.0.0.1:8000';
+}
+
+// Helper: get timeout from settings
+function getTimeout(): number {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const settings = JSON.parse(saved);
+      return settings.requestTimeout || 300000;
+    }
+  } catch {
+    // Ignore errors
+  }
+  return 300000;
+}
+
+// Create axios instance with dynamic base URL
+const getApi = () => axios.create({
+  baseURL: getApiUrl(),
+  timeout: getTimeout(),
 });
 
 // Health check
 export async function checkHealth() {
+  const api = getApi();
   const response = await api.get('/health');
   return response.data;
 }
 
 // Chat
 export async function sendChat(message: string, history: Message[] = []) {
+  const api = getApi();
   const response = await api.post('/api/chat', {
     message,
     history,
@@ -24,18 +55,14 @@ export async function sendChat(message: string, history: Message[] = []) {
 }
 
 // Models API
-// Note: /api/models endpoint не существует — используйте /api/models/teacher и /api/models/student
-// export async function getModels() {
-//   const response = await api.get('/api/models');
-//   return response.data as ModelInfo;
-// }
-
 export async function listTeacherFiles() {
+  const api = getApi();
   const response = await api.get('/api/models/teacher');
   return response.data;
 }
 
 export async function listStudentFiles() {
+  const api = getApi();
   const response = await api.get('/api/models/student');
   return response.data;
 }
@@ -45,10 +72,11 @@ export async function uploadModel(
   directory: 'teacher' | 'student' = 'teacher',
   onProgress?: (percent: number) => void
 ) {
+  const api = getApi();
   const formData = new FormData();
   formData.append('file', file);
   formData.append('directory', directory);
-  
+
   const response = await api.post('/api/models/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (progressEvent) => {
@@ -62,6 +90,7 @@ export async function uploadModel(
 }
 
 export async function convertModel(teacherPath: string, studentPath: string) {
+  const api = getApi();
   const response = await api.post('/api/models/convert', {
     teacher_path: teacherPath,
     student_path: studentPath,
@@ -70,6 +99,7 @@ export async function convertModel(teacherPath: string, studentPath: string) {
 }
 
 export async function createStudentFromScratch(architecture?: any) {
+  const api = getApi();
   const response = await api.post('/api/models/student/scratch', {
     model_family: architecture?.model_family || 'qwen3',
     hidden_size: architecture?.hidden_size || 768,
@@ -85,6 +115,7 @@ export async function createStudentFromScratch(architecture?: any) {
 }
 
 export async function validateModel(teacherModel: string, studentModel: string) {
+  const api = getApi();
   const response = await api.post('/api/models/validate', {
     teacher_model: teacherModel,
     student_model: studentModel,
@@ -93,13 +124,14 @@ export async function validateModel(teacherModel: string, studentModel: string) 
 }
 
 export async function analyzeTeacherModel(filename: string) {
-  // Извлекаем только имя файла без пути
+  const api = getApi();
   const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
   const response = await api.get(`/api/models/teacher/${encodeURIComponent(cleanFilename)}`);
   return response.data;
 }
 
 export async function analyzeStudentModel(filename: string) {
+  const api = getApi();
   const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
   const response = await api.get(`/api/models/student/${encodeURIComponent(cleanFilename)}`);
   return response.data;
@@ -114,6 +146,7 @@ export async function sendChatToMode(
   message: string,
   history: Array<{ role: string; content: string; timestamp: string }> = []
 ) {
+  const api = getApi();
   const response = await api.post('/api/chat/mode', {
     mode,
     message,
@@ -123,6 +156,7 @@ export async function sendChatToMode(
 }
 
 export async function exportChatHistory(mode: string, messages: Array<{ role: string; content: string; timestamp: string }>) {
+  const api = getApi();
   const response = await api.post('/api/chat/export', {
     mode,
     messages,
@@ -135,6 +169,7 @@ export async function exportChatHistory(mode: string, messages: Array<{ role: st
 // ============================================================================
 
 export async function listPlugins() {
+  const api = getApi();
   const response = await api.get('/api/plugins');
   return response.data;
 }
@@ -146,11 +181,46 @@ export async function createPlugin(plugin: {
   version: string;
   capabilities: string[];
 }) {
+  const api = getApi();
   const response = await api.post('/api/plugins', plugin);
   return response.data;
 }
 
 export async function deletePlugin(pluginName: string) {
+  const api = getApi();
   const response = await api.delete(`/api/plugins/${encodeURIComponent(pluginName)}`);
+  return response.data;
+}
+
+// ============================================================================
+// Benchmark API
+// ============================================================================
+
+export async function runBenchmark(config: {
+  qa_pairs: number;
+  chat_dialogs: number;
+  code_examples: number;
+  creative_tasks: number;
+  output_dir: string;
+  teacher_model?: string;
+  student_model?: string;
+}) {
+  const api = getApi();
+  const response = await api.post('/api/benchmark/run', config);
+  return response.data;
+}
+
+export async function compareBenchmarkAnswers(teacher: string, student: string) {
+  const api = getApi();
+  const response = await api.post('/api/benchmark/compare', { teacher, student });
+  return response.data;
+}
+
+export async function fineTuneStudent(teacherModel: string, studentModel: string) {
+  const api = getApi();
+  const response = await api.post('/api/benchmark/fine-tune', {
+    teacher_model: teacherModel,
+    student_model: studentModel,
+  });
   return response.data;
 }
