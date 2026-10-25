@@ -7,15 +7,32 @@ import struct
 import os
 import shutil
 import json
+import sys
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Добавляем Core в путь для импорта ModelConverter
+_CORE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "core")
+if _CORE_PATH not in sys.path:
+    sys.path.insert(0, _CORE_PATH)
+
+# Импортируем реальный ModelConverter из Core
+try:
+    from model_converter import ModelConverter
+    MODEL_CONVERTER_AVAILABLE = True
+except ImportError:
+    ModelConverter = None
+    MODEL_CONVERTER_AVAILABLE = False
 
 
 class RESTEngine:
     """Движок для REST API"""
 
-    # Базовая директория для моделей (относительно backend/)
+    # Базовая директория для моделей — NeuroConstructor.Core/models/
     MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models")
 
     def __init__(self):
@@ -53,7 +70,49 @@ class RESTEngine:
         return {"status": "created", "student_model_info": "Student template created", "compression_applied": True}
 
     def convert_model(self, teacher_path: str, student_path: str) -> Dict[str, Any]:
-        return {"status": "converted", "results": "Conversion complete", "compression_ratio": 0.1, "quality_score": 0.85}
+        """Конвертация Teacher -> Student с использованием ModelConverter из Core"""
+        # Проверяем что ModelConverter доступен
+        if not MODEL_CONVERTER_AVAILABLE or ModelConverter is None:
+            return {
+                "status": "error",
+                "error_message": "ModelConverter not available — Core module не найден",
+            }
+
+        # Пути относительно MODELS_DIR
+        teacher_full = os.path.join(self.MODELS_DIR, teacher_path)
+        student_dir = os.path.join(self.MODELS_DIR, os.path.dirname(student_path))
+        student_full = os.path.join(student_dir, "weights.bin")
+
+        # Создаём директорию для Student
+        os.makedirs(student_dir, exist_ok=True)
+
+        # Создаём ModelConverter и выполняем конвертацию
+        logger.info(f"Starting conversion: {teacher_path} -> {student_path}")
+        converter = ModelConverter()
+
+        try:
+            result = converter.convert_teacher_to_student(teacher_full, student_full)
+        except Exception as e:
+            logger.error(f"Conversion error: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "error_message": f"Conversion failed: {str(e)}",
+            }
+
+        if result["status"] == "success":
+            logger.info(f"Conversion successful: ratio={result.get('compression_ratio')}, quality={result.get('quality_score')}")
+            return {
+                "status": "converted",
+                "conversion_results": result.get("student_path", ""),
+                "compression_ratio": float(result.get("compression_ratio", 0.0)),
+                "quality_score": float(result.get("quality_score", 0.0)),
+                "compression_method": result.get("compression_method", "quantization"),
+            }
+        else:
+            return {
+                "status": "error",
+                "error_message": result.get("error", "Conversion failed"),
+            }
 
     def validate_model(self, teacher: str, student: str) -> Dict[str, Any]:
         return {"is_valid": True, "quality_score": 0.9, "compatibility_score": 0.9}
@@ -255,9 +314,12 @@ class RESTEngine:
         for filename in os.listdir(target_dir):
             filepath = os.path.join(target_dir, filename)
             if os.path.isfile(filepath):
+                # Пропускаем метаданные в директории student
+                if directory == "student" and filename in ("config.json", "model_info.json"):
+                    continue
                 files.append({
                     "filename": filename,
-                    "path": os.path.join("models", directory, filename),
+                    "path": f"models/{directory}/{filename}",
                     "size": os.path.getsize(filepath),
                     "modified": datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat(),
                 })
@@ -380,10 +442,58 @@ class RESTEngine:
 
         return {
             "status": "success",
-            "path": os.path.join("models", directory, filename),
+            "path": f"models/{directory}/{filename}",
             "size": len(file_data),
             "message": f"Модель {filename} загружена",
         }
+
+    def analyze_student_model(self, filename: str) -> Dict[str, Any]:
+        """Анализ Student модели из config.json и model_info.json рядом с weights.bin"""
+        # filename - это имя weights.bin файла
+        weights_filename = filename if filename.endswith('.bin') else filename.replace('.gguf', '.bin')
+        
+        # Ищем weights.bin в директории student
+        student_dir = os.path.join(self.MODELS_DIR, "student")
+        weights_path = os.path.join(student_dir, weights_filename)
+        
+        # Если не нашли, пробуем найти любой .bin файл
+        if not os.path.exists(weights_path):
+            bin_files = [f for f in os.listdir(student_dir) if f.endswith('.bin')]
+            if bin_files:
+                weights_filename = bin_files[0]
+                weights_path = os.path.join(student_dir, weights_filename)
+        
+        config_path = os.path.join(student_dir, "config.json")
+        info_path = os.path.join(student_dir, "model_info.json")
+
+        result = {
+            "status": "success",
+            "filename": filename,
+        }
+
+        # Читаем config.json
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                result["config"] = config
+            except Exception as e:
+                result["config_error"] = str(e)
+        else:
+            result["config_error"] = "config.json not found"
+
+        # Читаем model_info.json
+        if os.path.exists(info_path):
+            try:
+                with open(info_path, 'r', encoding='utf-8') as f:
+                    info = json.load(f)
+                result["model_info"] = info
+            except Exception as e:
+                result["info_error"] = str(e)
+        else:
+            result["info_error"] = "model_info.json not found"
+
+        return result
 
     def create_student_from_scratch(self, architecture: Dict[str, Any] = None) -> Dict[str, Any]:
         """Создание Student модели с нуля"""

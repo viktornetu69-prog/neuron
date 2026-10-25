@@ -17,6 +17,7 @@ interface ConvertDialogProps {
   onOutputPathChange: (path: string) => void;
   onConvert: () => void;
   onCancel: () => void;
+  convertProgress?: { progress: number; stage: string } | null;
 }
 
 // ============================================================================
@@ -40,7 +41,7 @@ const dialogStyle: React.CSSProperties = {
   background: '#121220',
   borderRadius: 12,
   padding: 24,
-  width: 500,
+  width: 550,
   maxWidth: '90%',
   border: '1px solid #1e1e30',
 };
@@ -91,6 +92,28 @@ const cancelButtonStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
+const progressContainerStyle: React.CSSProperties = {
+  marginBottom: 16,
+  padding: '12px 0',
+};
+
+const progressBarBgStyle: React.CSSProperties = {
+  width: '100%',
+  height: 12,
+  background: '#0a0a0f',
+  borderRadius: 6,
+  overflow: 'hidden',
+  marginBottom: 6,
+};
+
+const progressLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  fontSize: 13,
+  color: '#8888aa',
+};
+
 // ============================================================================
 // Компонент
 // ============================================================================
@@ -106,50 +129,93 @@ const ConvertDialog: React.FC<ConvertDialogProps> = ({
   onOutputPathChange,
   onConvert,
   onCancel,
-}) => (
-  <div style={overlayStyle} onClick={onCancel}>
-    <div style={dialogStyle} onClick={e => e.stopPropagation()}>
-      <h3 style={h3Style}>Конвертировать в Student</h3>
-      
-      <div style={sourceInfoStyle}>
-        Источник: <span style={{ color: '#e8e8e8' }}>{selectedFile.filename}</span>
-      </div>
-      
-      <input
-        type="text"
-        value={outputPath}
-        onChange={e => onOutputPathChange(e.target.value)}
-        placeholder="Путь сохранения (например: models/student/my_model.gguf)"
-        style={inputStyle}
-      />
-      
-      <div style={buttonContainerStyle}>
-        <button
-          onClick={onCancel}
-          disabled={loading}
-          style={cancelButtonStyle}
-        >
-          Отмена
-        </button>
-        <button
-          onClick={onConvert}
-          disabled={loading || !outputPath.trim()}
-          style={{
-            padding: '10px 20px',
-            background: outputPath.trim() ? '#ff9800' : '#1e1e30',
-            border: 'none',
-            borderRadius: 8,
-            color: 'white',
-            cursor: outputPath.trim() && !loading ? 'pointer' : 'not-allowed',
-            fontSize: 13,
-            fontWeight: 500,
-          }}
-        >
-          {loading ? 'Конвертация...' : 'Конвертировать'}
-        </button>
+  convertProgress,
+}) => {
+  const isComplete = convertProgress?.progress === 100;
+  const isFailed = convertProgress?.progress === -1;
+
+  return (
+    <div style={overlayStyle} onClick={onCancel}>
+      <div style={dialogStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={h3Style}>
+          Конвертировать в Student
+        </h3>
+
+        <div style={sourceInfoStyle}>
+          Источник: <span style={{ color: '#e8e8e8' }}>{selectedFile.filename}</span>
+        </div>
+
+        <input
+          type="text"
+          value={outputPath}
+          onChange={e => onOutputPathChange(e.target.value)}
+          placeholder="Путь сохранения (например: models/student/my_model.gguf)"
+          style={{ ...inputStyle, opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}
+        />
+
+        {/* Прогресс-бар конвертации */}
+        {convertProgress && (
+          <div style={progressContainerStyle}>
+            <div style={progressBarBgStyle}>
+              <div style={{
+                width: `${Math.max(0, Math.min(100, convertProgress.progress))}%`,
+                height: '100%',
+                background: isFailed
+                  ? '#f44336'
+                  : isComplete
+                    ? '#4caf50'
+                    : 'linear-gradient(90deg, #ff9800, #ffb74d)',
+                borderRadius: 6,
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+            <div style={progressLabelStyle}>
+              <span>{convertProgress.stage}</span>
+              <span style={{ fontWeight: 600, color: isFailed ? '#f44336' : isComplete ? '#4caf50' : '#ff9800' }}>
+                {Math.max(0, Math.min(100, convertProgress.progress))}%
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div style={buttonContainerStyle}>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            style={cancelButtonStyle}
+          >
+            {isComplete || isFailed ? 'Закрыть' : 'Отмена'}
+          </button>
+          <button
+            onClick={onConvert}
+            disabled={loading || !outputPath.trim() || isComplete || isFailed}
+            style={{
+              padding: '10px 20px',
+              background: (outputPath.trim() && !loading && !isComplete && !isFailed)
+                ? '#ff9800'
+                : '#1e1e30',
+              border: 'none',
+              borderRadius: 8,
+              color: 'white',
+              cursor: (outputPath.trim() && !loading && !isComplete && !isFailed)
+                ? 'pointer'
+                : 'not-allowed',
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            {loading
+              ? 'Конвертация...'
+              : isComplete
+                ? 'Готово!'
+                : isFailed
+                  ? 'Ошибка'
+                  : 'Конвертировать'}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default ConvertDialog;

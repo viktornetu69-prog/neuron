@@ -97,3 +97,9 @@ export async function analyzeTeacherModel(filename: string) {
   const response = await api.get(`/api/models/teacher/${encodeURIComponent(cleanFilename)}`);
   return response.data;
 }
+
+export async function analyzeStudentModel(filename: string) {
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/models/student/${encodeURIComponent(cleanFilename)}`);
+  return response.data;
+}

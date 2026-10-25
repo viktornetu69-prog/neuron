@@ -9,7 +9,7 @@
  * - Диалоги: ConvertDialog, StudentCreateDialog
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ModelFile } from '@/types';
 import ModelListPanel from './ModelListPanel';
 import ConvertDialog from './ConvertDialog';
@@ -17,7 +17,7 @@ import StudentCreateDialog from './StudentCreateDialog';
 import { StudentArchitecture } from './StudentCreateDialog';
 import { useModelManager } from './model-state';
 import { formatParams, formatDate, formatSize } from './files-manager';
-import { convertTeacherToStudent, createStudentFromScratchAPI } from './files-manager';
+import { convertTeacherToStudent, createStudentFromScratchAPI, analyzeStudentFile } from './files-manager';
 
 // ============================================================================
 // Константы
@@ -52,8 +52,12 @@ export function ModelsPanel({
   // --- State ---
   const [showConvertDialog, setShowConvertDialog] = useState(false);
   const [showCreateStudentDialog, setShowCreateStudentDialog] = useState(false);
-  const [outputPath, setOutputPath] = useState('models/student/');
+  const [outputPath, setOutputPath] = useState('student/');
   const [studentArch, setStudentArch] = useState<StudentArchitecture>(DEFAULT_STUDENT_ARCH);
+  const [convertProgress, setConvertProgress] = useState<{ progress: number; stage: string } | null>(null);
+  const [studentAnalysis, setStudentAnalysis] = useState<any | null>(null);
+  const [studentAnalysisVersion, setStudentAnalysisVersion] = useState(0);
+  const [showComparisonView, setShowComparisonView] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,6 +86,16 @@ export function ModelsPanel({
   // Обработка выбора файла из списка
   const handleFileSelect = async (file: ModelFile) => {
     await selectFile(file);
+
+    const isStudentFile = file.path.includes('/student/') || file.path.includes('\\student\\');
+    if (isStudentFile) {
+      // Не await'им — анализ работает в фоне и обновит state когда будет готов
+      analyzeStudentFile(file.filename, (analysis) => {
+        setStudentAnalysis(analysis);
+        setStudentAnalysisVersion(prev => prev + 1);
+      });
+    }
+    // Не сбрасываем studentAnalysis при выборе Teacher — он нужен для сравнения
   };
 
   // Обработка загрузки файла
@@ -102,20 +116,45 @@ export function ModelsPanel({
   const handleConvert = async () => {
     if (!selectedFile) return;
 
+    setConvertProgress({ progress: 0, stage: 'Подготовка...' });
+
     const result = await convertTeacherToStudent(
       selectedFile,
       outputPath,
       undefined, // loading
       loadFiles,
-      setOutputPath
+      setOutputPath,
+      (progress: number, stage: string) => {
+        setConvertProgress({ progress, stage });
+      }
     );
 
     if (result.success) {
       alert('✅ Student успешно создан!');
+      setShowConvertDialog(false);
+      setConvertProgress(null);
+      // После успешной конвертации показываем сравнение
+      setShowComparisonView(true);
     } else {
       alert('❌ Ошибка создания Student: ' + (result.error || 'Неизвестная ошибка'));
       clearError();
+      setConvertProgress(null);
     }
+  };
+
+  // Переключение режима сравнения
+  const toggleComparisonView = () => {
+    if (!showComparisonView) {
+      // Включаем сравнение — загружаем анализ Student
+      if (studentFiles.length > 0) {
+        const lastStudent = studentFiles[studentFiles.length - 1];
+        analyzeStudentFile(lastStudent.filename, (analysis) => {
+          setStudentAnalysis(analysis);
+          setStudentAnalysisVersion(prev => prev + 1);
+        });
+      }
+    }
+    setShowComparisonView(prev => !prev);
   };
 
   // Обработка создания Student
@@ -221,7 +260,16 @@ export function ModelsPanel({
   const rightPanelStyle: React.CSSProperties = {
     flex: 1,
     overflowY: 'auto',
+    padding: showComparisonView && teacherAnalysis?.status === 'success' ? 0 : 24,
+    display: showComparisonView && teacherAnalysis?.status === 'success' ? 'flex' : 'block',
+    gap: 24,
+  };
+
+  const comparisonColumnStyle: React.CSSProperties = {
+    flex: 1,
     padding: 24,
+    overflowY: 'auto',
+    borderBottom: '1px solid #1e1e30',
   };
 
   const gridStyle: React.CSSProperties = {
@@ -376,7 +424,184 @@ export function ModelsPanel({
 
         {/* Right panel: Details */}
         <div style={rightPanelStyle}>
-          {!selectedFile ? (
+          {/* Режим сравнения */}
+          {showComparisonView && teacherAnalysis?.status === 'success' ? (
+            <>
+              {/* Column 1: Teacher */}
+              <div style={comparisonColumnStyle}>
+                <h2 style={{ fontSize: 18, fontWeight: 600, color: '#e8e8e8', marginBottom: 16 }}>
+                  📦 {teacherAnalysis.filename || selectedFile?.filename}
+                </h2>
+                {archFields.length > 0 && (
+                  <>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                      📐 Архитектура
+                    </h3>
+                    <div style={gridStyle}>
+                      {archFields.map((field, index) => (
+                        <div key={index} style={cardStyle} title={fieldDescriptions[field.label] || ''}>
+                          <div style={labelStyle}>{field.label}</div>
+                          <div style={valueStyle}>{field.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {selectedFile && (
+                  <div style={{
+                    padding: 12,
+                    background: 'rgba(124, 111, 247, 0.1)',
+                    borderLeft: '3px solid #7c6ff7',
+                    borderRadius: '0 6px 6px 0',
+                    marginBottom: 16,
+                  }}>
+                    <div style={{ fontSize: 12, color: '#7c6ff7', fontWeight: 600, marginBottom: 4 }}>
+                      ℹ️ Информация
+                    </div>
+                    <div style={{ fontSize: 12, color: '#e8e8e8' }}>
+                      Размер: {formatSize(selectedFile.size)} • Изменён: {formatDate(selectedFile.modified)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Column 2: Student */}
+              <div style={comparisonColumnStyle}>
+                <h2 style={{ fontSize: 18, fontWeight: 600, color: '#e8e8e8', marginBottom: 16 }}>
+                  🎓 {studentFiles.length > 0 ? studentFiles[studentFiles.length - 1].filename : 'Student'}
+                </h2>
+
+                {studentAnalysis?.status === 'success' ? (
+                  <>
+                    {/* Архитектура Student */}
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                      📐 Архитектура
+                    </h3>
+                    <div style={gridStyle}>
+                      {(() => {
+                        const studentArch = studentAnalysis.config?.student_architecture || studentAnalysis.config?.architecture;
+                        if (!studentArch) return null;
+                        const fields = [
+                          { label: 'Семейство', value: studentArch.model_family?.toUpperCase() },
+                          { label: 'Размер словаря', value: studentArch.vocab_size?.toLocaleString() },
+                          { label: 'Размерность (Hidden)', value: studentArch.hidden_size?.toLocaleString() },
+                          { label: 'Слои', value: studentArch.num_layers?.toString() },
+                          { label: 'Головки внимания', value: studentArch.num_heads?.toString() },
+                          { label: 'Размер головки', value: studentArch.head_dim?.toString() },
+                          { label: 'Макс. контекст', value: studentArch.max_position_embeddings?.toLocaleString() },
+                          { label: 'RoPE Theta', value: studentArch.rope_theta?.toLocaleString() },
+                        ];
+                        return fields.map((field, index) => (
+                          <div key={index} style={cardStyle}>
+                            <div style={labelStyle}>{field.label}</div>
+                            <div style={valueStyle}>{field.value || 'N/A'}</div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+
+                    {/* Сжатие */}
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                      📦 Сжатие
+                    </h3>
+                    <div style={gridStyle}>
+                      {(() => {
+                        const compression = studentAnalysis.config?.compression;
+                        if (!compression) return null;
+                        return (
+                          <>
+                            <div style={cardStyle}>
+                              <div style={labelStyle}>Метод</div>
+                              <div style={valueStyle}>{compression.method || 'N/A'}</div>
+                            </div>
+                            <div style={cardStyle}>
+                              <div style={labelStyle}>Коэффициент</div>
+                              <div style={valueStyle}>{(compression.ratio * 100).toFixed(1)}%</div>
+                            </div>
+                            <div style={cardStyle}>
+                              <div style={labelStyle}>Применено</div>
+                              <div style={valueStyle}>{compression.applied ? 'Да' : 'Нет'}</div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Качество конвертации */}
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                      ⚡ Качество
+                    </h3>
+                    <div style={gridStyle}>
+                      {(() => {
+                        const quality = studentAnalysis.config?.metadata?.conversion_quality;
+                        if (!quality) return null;
+                        return (
+                          <>
+                            <div style={cardStyle}>
+                              <div style={labelStyle}>Общий скор</div>
+                              <div style={{ ...valueStyle, color: quality.quality_score > 0.7 ? '#4caf50' : quality.quality_score > 0.5 ? '#ff9800' : '#f44336' }}>
+                                {(quality.quality_score * 100).toFixed(1)}%
+                              </div>
+                            </div>
+                            {quality.detailed_scores?.architectural_similarity !== undefined && (
+                              <div style={cardStyle}>
+                                <div style={labelStyle}>Архитектура</div>
+                                <div style={valueStyle}>{(quality.detailed_scores.architectural_similarity * 100).toFixed(1)}%</div>
+                              </div>
+                            )}
+                            {quality.detailed_scores?.compression_efficiency !== undefined && (
+                              <div style={cardStyle}>
+                                <div style={labelStyle}>Сжатие</div>
+                                <div style={valueStyle}>{(quality.detailed_scores.compression_efficiency * 100).toFixed(1)}%</div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Рекомендации */}
+                    {(() => {
+                      const quality = studentAnalysis.config?.metadata?.conversion_quality;
+                      if (quality?.recommendations && quality.recommendations.length > 0) {
+                        return (
+                          <div style={{
+                            padding: 12,
+                            background: 'rgba(255, 152, 0, 0.1)',
+                            borderLeft: '3px solid #ff9800',
+                            borderRadius: '0 6px 6px 0',
+                            marginBottom: 16,
+                          }}>
+                            <div style={{ fontSize: 12, color: '#ff9800', fontWeight: 600, marginBottom: 4 }}>
+                              ⚠️ Рекомендации
+                            </div>
+                            {quality.recommendations.map((rec: string, idx: number) => (
+                              <div key={idx} style={{ fontSize: 12, color: '#ff9800', marginBottom: 2 }}>
+                                • {rec}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </>
+                ) : (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '200px',
+                    color: '#8888aa',
+                  }}>
+                    <p style={{ fontSize: 14 }}>Анализ Student не доступен</p>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : !selectedFile ? (
+            // Обычный режим (без сравнения) - нет выбранного файла
             <div style={{
               display: 'flex',
               flexDirection: 'column',
@@ -414,6 +639,19 @@ export function ModelsPanel({
                   ⟳ Конвертировать в Student
                 </button>
                 <button
+                  onClick={toggleComparisonView}
+                  disabled={loading}
+                  style={{
+                    ...actionButtonStyle,
+                    background: '#1a1a2e',
+                    border: '1px solid #2a2a3e',
+                    color: showComparisonView ? 'white' : '#8888aa',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {showComparisonView ? '⊘ Выйти из сравнения' : '⇔ Сравнить'}
+                </button>
+                <button
                   onClick={loadFiles}
                   disabled={loading}
                   style={{
@@ -448,20 +686,164 @@ export function ModelsPanel({
             </div>
           ) : (
             // Student file
-            <div>
+            <div key={studentAnalysisVersion}>
               <h2 style={{ fontSize: 18, fontWeight: 600, color: '#e8e8e8', marginBottom: 16 }}>
                 🎓 {selectedFile.filename}
               </h2>
-              <div style={gridStyle}>
-                <div style={cardStyle}>
-                  <div style={labelStyle}>Размер</div>
-                  <div style={valueStyle}>{formatSize(selectedFile.size)}</div>
+
+              {studentAnalysis?.status === 'success' ? (
+                <>
+                  {/* Основная информация */}
+                  <div style={{ ...gridStyle, marginBottom: 16 }}>
+                    <div style={cardStyle}>
+                      <div style={labelStyle}>Файл weights.bin</div>
+                      <div style={valueStyle}>{formatSize(selectedFile.size)}</div>
+                    </div>
+                    <div style={cardStyle}>
+                      <div style={labelStyle}>Изменён</div>
+                      <div style={valueStyle}>{formatDate(selectedFile.modified)}</div>
+                    </div>
+                    {studentAnalysis.model_info?.file_size_bytes && (
+                      <div style={cardStyle}>
+                        <div style={labelStyle}>Вес Student</div>
+                        <div style={valueStyle}>{formatSize(studentAnalysis.model_info.file_size_bytes)}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Архитектура Student */}
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                    📐 Архитектура
+                  </h3>
+                  <div style={gridStyle}>
+                    {(() => {
+                      const studentArch = studentAnalysis.config?.student_architecture || studentAnalysis.config?.architecture;
+                      if (!studentArch) return null;
+                      const fields = [
+                        { label: 'Семейство', value: studentArch.model_family?.toUpperCase() },
+                        { label: 'Размер словаря', value: studentArch.vocab_size?.toLocaleString() },
+                        { label: 'Размерность (Hidden)', value: studentArch.hidden_size?.toLocaleString() },
+                        { label: 'Слои', value: studentArch.num_layers?.toString() },
+                        { label: 'Головки внимания', value: studentArch.num_heads?.toString() },
+                        { label: 'Размер головки', value: studentArch.head_dim?.toString() },
+                        { label: 'Макс. контекст', value: studentArch.max_position_embeddings?.toLocaleString() },
+                        { label: 'RoPE Theta', value: studentArch.rope_theta?.toLocaleString() },
+                      ];
+                      return fields.map((field, index) => (
+                        <div key={index} style={cardStyle}>
+                          <div style={labelStyle}>{field.label}</div>
+                          <div style={valueStyle}>{field.value || 'N/A'}</div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+
+                  {/* Сжатие */}
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                    📦 Сжатие
+                  </h3>
+                  <div style={gridStyle}>
+                    {(() => {
+                      const compression = studentAnalysis.config?.compression;
+                      if (!compression) return null;
+                      return (
+                        <>
+                          <div style={cardStyle}>
+                            <div style={labelStyle}>Метод</div>
+                            <div style={valueStyle}>{compression.method || 'N/A'}</div>
+                          </div>
+                          <div style={cardStyle}>
+                            <div style={labelStyle}>Коэффициент</div>
+                            <div style={valueStyle}>{(compression.ratio * 100).toFixed(1)}%</div>
+                          </div>
+                          <div style={cardStyle}>
+                            <div style={labelStyle}>Применено</div>
+                            <div style={valueStyle}>{compression.applied ? 'Да' : 'Нет'}</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Качество конвертации */}
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>
+                    ⚡ Качество
+                  </h3>
+                  <div style={gridStyle}>
+                    {(() => {
+                      const quality = studentAnalysis.config?.metadata?.conversion_quality;
+                      if (!quality) return null;
+                      return (
+                        <>
+                          <div style={cardStyle}>
+                            <div style={labelStyle}>Общий скор</div>
+                            <div style={{ ...valueStyle, color: quality.quality_score > 0.7 ? '#4caf50' : quality.quality_score > 0.5 ? '#ff9800' : '#f44336' }}>
+                              {(quality.quality_score * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                          {quality.detailed_scores?.architectural_similarity !== undefined && (
+                            <div style={cardStyle}>
+                              <div style={labelStyle}>Архитектура</div>
+                              <div style={valueStyle}>{(quality.detailed_scores.architectural_similarity * 100).toFixed(1)}%</div>
+                            </div>
+                          )}
+                          {quality.detailed_scores?.compression_efficiency !== undefined && (
+                            <div style={cardStyle}>
+                              <div style={labelStyle}>Сжатие</div>
+                              <div style={valueStyle}>{(quality.detailed_scores.compression_efficiency * 100).toFixed(1)}%</div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Рекомендации */}
+                  {(() => {
+                    const quality = studentAnalysis.config?.metadata?.conversion_quality;
+                    if (quality?.recommendations && quality.recommendations.length > 0) {
+                      return (
+                        <div style={{
+                          padding: 12,
+                          background: 'rgba(255, 152, 0, 0.1)',
+                          borderLeft: '3px solid #ff9800',
+                          borderRadius: '0 6px 6px 0',
+                          marginBottom: 16,
+                        }}>
+                          <div style={{ fontSize: 12, color: '#ff9800', fontWeight: 600, marginBottom: 4 }}>
+                            ⚠️ Рекомендации
+                          </div>
+                          {quality.recommendations.map((rec: string, idx: number) => (
+                            <div key={idx} style={{ fontSize: 12, color: '#ff9800', marginBottom: 2 }}>
+                              • {rec}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
+              ) : (
+                // Student analysis error
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: '#8888aa',
+                }}>
+                  <p style={{ fontSize: 14, marginBottom: 8 }}>🎓 {selectedFile.filename}</p>
+                  <p style={{ fontSize: 13, color: '#f44336' }}>
+                    {studentAnalysis?.error || 'Анализ не доступен'}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#666688', marginTop: 8 }}>
+                    Размер: {formatSize(selectedFile.size)} • Изменён: {formatDate(selectedFile.modified)}
+                  </p>
                 </div>
-                <div style={cardStyle}>
-                  <div style={labelStyle}>Изменён</div>
-                  <div style={valueStyle}>{formatDate(selectedFile.modified)}</div>
-                </div>
-              </div>
+              )}
+
               <div style={actionButtonsStyle}>
                 <button
                   onClick={loadFiles}
@@ -490,7 +872,11 @@ export function ModelsPanel({
           loading={loading}
           onOutputPathChange={setOutputPath}
           onConvert={handleConvert}
-          onCancel={() => setShowConvertDialog(false)}
+          onCancel={() => {
+            setShowConvertDialog(false);
+            setConvertProgress(null);
+          }}
+          convertProgress={convertProgress}
         />
       )}
 

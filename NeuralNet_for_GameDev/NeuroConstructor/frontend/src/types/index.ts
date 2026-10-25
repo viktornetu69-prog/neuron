@@ -103,3 +103,13 @@ export interface ModelInfo {
   teachers: TeacherModel[];
   students: StudentModel[];
 }
+
+export interface StudentAnalysisResult {
+  status: string;
+  filename?: string;
+  config?: Record<string, unknown>;
+  model_info?: Record<string, unknown>;
+  config_error?: string;
+  info_error?: string;
+  error?: string;
+}

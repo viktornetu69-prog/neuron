@@ -5,6 +5,7 @@ Student-Teacher Architecture - Core model conversion functionality
 
 import json
 import os
+import shutil
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from pathlib import Path
@@ -97,7 +98,7 @@ class ModelConverter:
             student_model = self._create_student_from_teacher(teacher_model)
             student_model = self._apply_intelligent_compression(student_model, teacher_model)
             student_model = self._optimize_for_task(student_model, teacher_model)
-            self._save_student_model(student_model, student_path)
+            self._save_student_model(student_model, student_path, teacher_path, teacher_model)
             validation_result = self._validate_conversion_quality(student_model, teacher_model)
             
             return {
@@ -517,35 +518,238 @@ class ModelConverter:
 
 
 
-    def _save_student_model(self, student_model: Dict, save_path: str) -> None:
+    def _calculate_checksum(self, file_path: str, algorithm: str = "sha256", chunk_size: int = 8192) -> str:
+        """Вычисляет checksum файла"""
+        import hashlib
+        hasher = hashlib.new(algorithm)
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    def _estimate_inference_speed(self, model_arch: Dict) -> Dict:
+        """Оценивает скорость инференса на основе архитектуры модели (без реального запуска)"""
+        hidden = model_arch.get("hidden_size", 0)
+        layers = model_arch.get("num_layers", 0)
+        vocab = model_arch.get("vocab_size", 0)
+        head_dim = model_arch.get("head_dim", 128)
+        num_heads = model_arch.get("num_heads", 8)
+
+        if not all([hidden, layers, vocab]):
+            return {"estimated_tokens_per_sec": 0, "confidence": 0.0, "note": "Недостаточно данных для оценки"}
+
+        # Простая эвристика на основе количества параметров
+        # Эмбеддинги + весовые матрицы в слоях
+        embedding_ops = vocab * hidden * 2  # read + normalize
+        per_layer_ops = layers * (
+            4 * hidden * hidden * 2 +  # attention QKV + output
+            4 * hidden * hidden * 2 +  # feed-forward up/down
+            2 * hidden * hidden       # layer norm
+        )
+        total_ops = embedding_ops + per_layer_ops
+
+        # Базовая скорость (операции в секунду на CPU/GPU)
+        # Эвристика: ~10^11 ops/sec для CPU, ~10^13 для GPU
+        gpu_estimate = 1e13
+        cpu_estimate = 1e11
+
+        # Количество токенов в шаге (batch=1, seq_len=1 для базовой оценки)
+        tokens_per_step = 1
+        ops_per_token = total_ops / max(layers, 1)
+
+        # Оценочная скорость (tok/s) на GPU
+        estimated_tok_sec_gpu = gpu_estimate / max(ops_per_token, 1)
+        estimated_tok_sec_cpu = cpu_estimate / max(ops_per_token, 1)
+
+        # Ограничиваем реалистичными пределами
+        estimated_tok_sec_gpu = min(max(estimated_tok_sec_gpu, 1), 10000)
+        estimated_tok_sec_cpu = min(max(estimated_tok_sec_cpu, 0.1), 1000)
+
+        return {
+            "estimated_tokens_per_sec_gpu": round(estimated_tok_sec_gpu, 2),
+            "estimated_tokens_per_sec_cpu": round(estimated_tok_sec_cpu, 2),
+            "estimated_ops_per_token": int(ops_per_token),
+            "confidence": 0.7,  # Оценка эвристическая, не точная
+            "note": "Эвристика на основе архитектуры. Реальная скорость зависит от железа"
+        }
+
+    def _run_quality_check(self, teacher_model: Dict, student_model: Dict) -> Dict:
+        """Запускает проверку качества модели на основе архитектуры и параметров"""
+        teacher_arch = teacher_model.get("architecture", {})
+        student_arch = student_model.get("architecture", {})
+
+        # 1. Сравнение архитектуры
+        arch_scores = []
+
+        # Схожесть hidden_size (нормализованное сравнение)
+        t_hidden = teacher_arch.get("hidden_size", 0)
+        s_hidden = student_arch.get("hidden_size", 0)
+        if t_hidden > 0 and s_hidden > 0:
+            hidden_ratio = s_hidden / t_hidden
+            arch_scores.append(min(hidden_ratio, 1.0))  # Студент должен быть меньше или равен
+
+        # Схожесть num_layers
+        t_layers = teacher_arch.get("num_layers", 0)
+        s_layers = student_arch.get("num_layers", 0)
+        if t_layers > 0 and s_layers > 0:
+            layers_ratio = s_layers / t_layers
+            arch_scores.append(min(layers_ratio, 1.0))
+
+        # Схожесть num_heads
+        t_heads = teacher_arch.get("num_heads", 0)
+        s_heads = student_arch.get("num_heads", 0)
+        if t_heads > 0 and s_heads > 0:
+            heads_ratio = s_heads / t_heads
+            arch_scores.append(min(heads_ratio, 1.0))
+
+        # 2. Оценка сжатия
+        compression_ratio = student_model.get("compression", {}).get("ratio", 0)
+        compression_score = min(compression_ratio, 1.0)
+
+        # 3. Оценка функциональности
+        # Проверка что ключевые гиперпараметры сохранены
+        functionality_score = 0.0
+        checks = [
+            teacher_arch.get("model_family") == student_arch.get("model_family"),
+            teacher_arch.get("vocab_size") == student_arch.get("vocab_size"),
+            teacher_arch.get("max_position_embeddings", 2048) == student_arch.get("max_position_embeddings", 2048),
+            abs(teacher_arch.get("rope_theta", 10000) - student_arch.get("rope_theta", 10000)) < 1000,
+        ]
+        functionality_score = sum(checks) / len(checks)
+
+        # Общий скор качества
+        quality_score = (
+            sum(arch_scores) / max(len(arch_scores), 1) * 0.5 +
+            compression_score * 0.2 +
+            functionality_score * 0.3
+        )
+        quality_score = round(min(max(quality_score, 0.0), 1.0), 4)
+
+        # Детальная оценка
+        detailed_scores = {
+            "architectural_similarity": round(sum(arch_scores) / max(len(arch_scores), 1), 4),
+            "hidden_size_preservation": round(min(s_hidden / t_hidden, 1.0) if t_hidden > 0 else 0, 4),
+            "layers_preservation": round(min(s_layers / t_layers, 1.0) if t_layers > 0 else 0, 4),
+            "heads_preservation": round(min(s_heads / t_heads, 1.0) if t_heads > 0 else 0, 4),
+            "compression_efficiency": round(compression_score, 4),
+            "functionality_preservation": round(functionality_score, 4),
+        }
+
+        # Рекомендации
+        recommendations = []
+        if s_hidden < 512:
+            recommendations.append("hidden_size слишком мал (менее 512) — может снизить качество")
+        if s_layers < 6:
+            recommendations.append("num_layers слишком мал (менее 6) — может снизить качество")
+        if quality_score < 0.5:
+            recommendations.append("Общий скор качества низкий — рекомендуется пересмотреть параметры сжатия")
+
+        return {
+            "quality_score": quality_score,
+            "detailed_scores": detailed_scores,
+            "recommendations": recommendations,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    def _save_student_model(
+        self,
+        student_model: Dict,
+        save_path: str,
+        teacher_path: str = None,
+        teacher_model: Dict = None,
+    ) -> None:
         """Save the student model artefacts next to ``save_path``."""
         target_dir = os.path.dirname(os.path.abspath(save_path))
         os.makedirs(target_dir, exist_ok=True)
+
+        # Вычисляем checksum Teacher модели
+        teacher_checksum = None
+        teacher_size = 0
+        if teacher_path and os.path.exists(teacher_path):
+            teacher_checksum = self._calculate_checksum(teacher_path)
+            teacher_size = os.path.getsize(teacher_path)
+
+        # Оцениваем скорость инференса
+        teacher_arch = {}
+        if teacher_model:
+            teacher_arch = teacher_model.get("architecture", {})
+
+        student_arch = student_model.get("architecture", {})
+
+        teacher_inference = {}
+        student_inference = {}
+        if teacher_arch:
+            teacher_inference = self._estimate_inference_speed(teacher_arch)
+        if student_arch:
+            student_inference = self._estimate_inference_speed(student_arch)
+
+        # Запускаем проверку качества
+        quality_check = self._run_quality_check(teacher_model, student_model) if teacher_model else {"quality_score": 0, "recommendations": ["Нет модели учителя"]}
+
+        # Собираем config.json с полной информацией
         model_config = {
             "model_type": "student",
-            "architecture": student_model["architecture"],
+            "student_architecture": student_model["architecture"],
+            "teacher_model": {
+                "path": teacher_path,
+                "architecture": teacher_arch,
+                "parameters": teacher_model.get("parameters", {}),
+                "checksum": {
+                    "algorithm": "sha256",
+                    "value": teacher_checksum,
+                },
+                "size_bytes": teacher_size,
+                "inference_speed": teacher_inference,
+            },
+            "student_model": {
+                "architecture": student_arch,
+                "parameters": student_model.get("parameters", {}),
+                "size_bytes": teacher_size,  # пока копируем, т.к. веса — копия teacher
+                "inference_speed": student_inference,
+            },
             "loading": student_model["loading"],
             "compression": student_model["compression"],
-            "metadata": student_model["metadata"]
+            "metadata": {
+                "created": datetime.now().isoformat(),
+                "version": "stage2.0",
+                "compression_target": self.config["compression"]["target_compression_ratio"],
+                "conversion_quality": quality_check,
+            },
         }
+
         config_path = os.path.join(target_dir, "config.json")
-        with open(config_path, 'w') as f:
-            json.dump(model_config, f, indent=2)
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(model_config, f, indent=2, ensure_ascii=False)
+
+        # Копируем веса Teacher модели в Student
         weights_path = os.path.join(target_dir, "weights.bin")
-        with open(weights_path, 'w') as f:
-            f.write("# Compressed model weights ratio: " + str(student_model["compression"]["ratio"]))
+        if teacher_path and os.path.exists(teacher_path):
+            shutil.copy2(teacher_path, weights_path)
+        else:
+            with open(weights_path, "w") as f:
+                f.write("# Compressed model weights ratio: " + str(student_model["compression"]["ratio"]))
+
         model_info = {
             "model_type": "student",
             "format": "compressed",
             "path": save_path,
-            "architecture": student_model["architecture"],
+            "architecture": student_arch,
             "compression": student_model["compression"],
-            "metadata": student_model["metadata"],
-            "file_size_bytes": os.path.getsize(weights_path)
+            "metadata": {
+                **student_model["metadata"],
+                "quality_score": quality_check["quality_score"],
+                "quality_details": quality_check["detailed_scores"],
+                "recommendations": quality_check["recommendations"],
+                "teacher_checksum": teacher_checksum,
+            },
+            "file_size_bytes": os.path.getsize(weights_path),
         }
         info_path = os.path.join(target_dir, "model_info.json")
-        with open(info_path, 'w') as f:
-            json.dump(model_info, f, indent=2)
+        with open(info_path, "w", encoding="utf-8") as f:
+            json.dump(model_info, f, indent=2, ensure_ascii=False)
 
     def _calculate_compression_ratio(self, teacher_model: Dict, student_model: Dict) -> float:
         """

@@ -10,6 +10,7 @@ import {
   convertModel,
   createStudentFromScratch,
   analyzeTeacherModel,
+  analyzeStudentModel,
 } from '@/api.client';
 import { ModelFile } from '@/types';
 
@@ -134,6 +135,49 @@ export async function analyzeTeacherFile(
 }
 
 /**
+ * Анализ Student модели из config.json и model_info.json
+ */
+export interface StudentAnalysisResult {
+  status: string;
+  filename?: string;
+  config?: Record<string, unknown>;
+  model_info?: Record<string, unknown>;
+  config_error?: string;
+  info_error?: string;
+  [key: string]: unknown;
+}
+
+export async function analyzeStudentFile(
+  filename: string,
+  onStudentAnalysisChange?: (analysis: StudentAnalysisResult | null) => void
+): Promise<StudentAnalysisResult> {
+  try {
+    const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+    const analysis: StudentAnalysisResult = await analyzeStudentModel(cleanFilename);
+
+    if (analysis.status === 'success') {
+      onStudentAnalysisChange?.(analysis);
+    } else {
+      const errorAnalysis: StudentAnalysisResult = {
+        status: 'error',
+        error: analysis.error || 'Не удалось проанализировать Student модель',
+      };
+      onStudentAnalysisChange?.(errorAnalysis);
+    }
+
+    return analysis;
+  } catch (err: unknown) {
+    console.error('Failed to analyze student model:', err);
+    const errorAnalysis: StudentAnalysisResult = {
+      status: 'error',
+      error: 'Не удалось проанализировать Student модель',
+    };
+    onStudentAnalysisChange?.(errorAnalysis);
+    return errorAnalysis;
+  }
+}
+
+/**
  * Загрузка файла модели на сервер
  */
 export async function uploadModelFile(
@@ -160,12 +204,20 @@ export async function uploadModelFile(
 /**
  * Конвертация Teacher -> Student
  */
+export interface ConvertProgressCallback {
+  (progress: number, stage: string): void;
+}
+
+/**
+ * Конвертация Teacher -> Student
+ */
 export async function convertTeacherToStudent(
   selectedFile: ModelFile,
   outputPath: string,
   setLoading?: (loading: boolean) => void,
   onFilesLoaded?: () => void,
-  setOutputPath?: (path: string) => void
+  setOutputPath?: (path: string) => void,
+  onProgress?: ConvertProgressCallback
 ): Promise<{ success: boolean; error?: string }> {
   if (!outputPath.trim()) {
     return { success: false, error: 'Output path is required' };
@@ -173,13 +225,32 @@ export async function convertTeacherToStudent(
 
   setLoading?.(true);
   try {
-    const teacherPath = `models/teacher/${selectedFile.filename}`;
-    await convertModel(teacherPath, outputPath);
+    // Извлекаем только имя файла (без пути)
+    const filename = selectedFile.filename;
+    const baseName = filename.replace(/\.gguf$/i, '');
+
+    // Пути относительные (без MODELS_DIR префикса) — бэкенд сам добавит MODELS_DIR
+    const teacherPath = `teacher/${filename}`;
+    const studentDir = outputPath.replace(/\/+$/, '');
+    const studentPath = `${studentDir}/${baseName}_student.gguf`;
+
+    onProgress?.(10, 'Инициализация конвертации...');
+    console.log('Converting:', teacherPath, '->', studentPath);
+
+    const response = await convertModel(teacherPath, studentPath);
+    console.log('Convert response:', response);
+
+    if (response.status === 'error') {
+      return { success: false, error: response.error_message || 'Conversion failed' };
+    }
+
+    onProgress?.(100, 'Конвертация завершена!');
     await onFilesLoaded?.();
-    setOutputPath?.('models/student/');
+    setOutputPath?.('student/');
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Convert error:', err);
     return { success: false, error: `Failed to convert: ${msg}` };
   } finally {
     setLoading?.(false);

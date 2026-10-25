@@ -1,30 +1,162 @@
 {
   "model_type": "student",
-  "architecture": {
-    "model_family": "qwen3",
+  "student_architecture": {
+    "model_family": "llama",
     "vocab_size": 32000,
-    "hidden_size": 768,
-    "num_layers": 12,
-    "num_heads": 12,
-    "num_kv_heads": 12,
-    "head_dim": 64,
+    "hidden_size": 647,
+    "num_layers": 4,
+    "num_heads": 5,
+    "head_dim": 128,
     "max_position_embeddings": 2048,
-    "rope_theta": 10000.0
+    "rope_theta": 10000.0,
+    "compressed_size_gb": 0.0969,
+    "task_specific": {
+      "optimized_for": "language_modeling",
+      "special_tokens": [
+        "[CLS]",
+        "[SEP]",
+        "[PAD]"
+      ],
+      "max_sequence_length": 512
+    }
+  },
+  "teacher_model": {
+    "path": "C:\\Users\\user\\Desktop\\neuron\\NeuralNet_for_GameDev\\NeuroConstructor\\NeuroConstructor.Core\\models\\teacher/Qwen3-4B-Thinking-2507-Q4_K_M.gguf",
+    "architecture": {
+      "model_family": "llama",
+      "vocab_size": 32000,
+      "hidden_size": 4096,
+      "num_layers": 32,
+      "num_heads": 32,
+      "head_dim": 128
+    },
+    "parameters": {
+      "total_params": 7000000000,
+      "trainable_params": 7000000000,
+      "tensor_count": 300,
+      "file_size_gb": 0.96875
+    },
+    "checksum": {
+      "algorithm": "sha256",
+      "value": "c426a83426a353ae6447d92f4ecefe2aa9ad0b348f94ed97af91064229832eba"
+    },
+    "size_bytes": 1040187392,
+    "inference_speed": {
+      "estimated_tokens_per_sec_gpu": 10000,
+      "estimated_tokens_per_sec_cpu": 322.39,
+      "estimated_ops_per_token": 310181888,
+      "confidence": 0.7,
+      "note": "Эвристика на основе архитектуры. Реальная скорость зависит от железа"
+    }
+  },
+  "student_model": {
+    "architecture": {
+      "model_family": "llama",
+      "vocab_size": 32000,
+      "hidden_size": 647,
+      "num_layers": 4,
+      "num_heads": 5,
+      "head_dim": 128,
+      "max_position_embeddings": 2048,
+      "rope_theta": 10000.0,
+      "compressed_size_gb": 0.0969,
+      "task_specific": {
+        "optimized_for": "language_modeling",
+        "special_tokens": [
+          "[CLS]",
+          "[SEP]",
+          "[PAD]"
+        ],
+        "max_sequence_length": 512
+      }
+    },
+    "parameters": {},
+    "size_bytes": 1040187392,
+    "inference_speed": {
+      "estimated_tokens_per_sec_gpu": 10000,
+      "estimated_tokens_per_sec_cpu": 1000,
+      "estimated_ops_per_token": 17886962,
+      "confidence": 0.7,
+      "note": "Эвристика на основе архитектуры. Реальная скорость зависит от железа"
+    }
   },
   "loading": {
     "initialized": true,
-    "weights_loaded": false,
-    "compression_applied": false
+    "weights_loaded": true,
+    "compression_applied": true,
+    "teacher_model": {
+      "model_type": "teacher",
+      "format": "gguf",
+      "path": "C:\\Users\\user\\Desktop\\neuron\\NeuralNet_for_GameDev\\NeuroConstructor\\NeuroConstructor.Core\\models\\teacher/Qwen3-4B-Thinking-2507-Q4_K_M.gguf",
+      "loaded": true,
+      "architecture": {
+        "model_family": "llama",
+        "vocab_size": 32000,
+        "hidden_size": 4096,
+        "num_layers": 32,
+        "num_heads": 32,
+        "head_dim": 128
+      },
+      "parameters": {
+        "total_params": 7000000000,
+        "trainable_params": 7000000000,
+        "tensor_count": 300,
+        "file_size_gb": 0.96875
+      },
+      "diagnostics": {
+        "gguf_version": "estimated",
+        "loading_method": "basic",
+        "model_type": "gguf_estimated"
+      },
+      "analysis": {
+        "compression_potential": 0.4,
+        "specialization_opportunities": [
+          "attention",
+          "feed_forward",
+          "embeddings"
+        ],
+        "quality_factors": [
+          "standard_llama_architecture",
+          "small_file_light_compression"
+        ],
+        "conversion_complexity": "medium"
+      },
+      "recommendations": []
+    }
   },
   "compression": {
-    "applied": false,
-    "method": "none",
-    "ratio": 0.0,
-    "specialized_layers": []
+    "applied": true,
+    "method": "quantization",
+    "ratio": 0.9,
+    "specialized_layers": [
+      "attention_query",
+      "attention_key",
+      "attention_value",
+      "feed_forward_up",
+      "feed_forward_down",
+      "attention_output",
+      "layer_norm",
+      "rope"
+    ]
   },
   "metadata": {
-    "created": "2026-10-25T09:07:18.012245",
-    "version": "stage6.0",
-    "type": "student_template"
+    "created": "2026-10-25T09:55:00.064353",
+    "version": "stage2.0",
+    "compression_target": 0.1,
+    "conversion_quality": {
+      "quality_score": 0.5532,
+      "detailed_scores": {
+        "architectural_similarity": 0.1464,
+        "hidden_size_preservation": 0.158,
+        "layers_preservation": 0.125,
+        "heads_preservation": 0.1562,
+        "compression_efficiency": 0.9,
+        "functionality_preservation": 1.0
+      },
+      "recommendations": [
+        "num_layers слишком мал (менее 6) — может снизить качество"
+      ],
+      "timestamp": "2026-10-25T09:55:00.064343"
+    }
   }
 }

@@ -332,18 +332,30 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
 
 @app.post("/api/models/convert", response_model=ConvertResponse)
 async def convert_model(request: ConvertRequest):
+    """Конвертация Teacher -> Student с использованием ModelConverter из Core"""
     if not server_state["engine"]:
         raise HTTPException(status_code=503, detail="Engine not initialized")
+
+    logger.info(f"Converting: {request.teacher_path} -> {request.student_path}")
+
     try:
+        # Вызываем engine.convert_model() который использует ModelConverter из Core
         result = server_state["engine"].convert_model(request.teacher_path, request.student_path)
+
+        if result.get("status") == "error":
+            return ConvertResponse(
+                status="error",
+                error_message=result.get("error_message", "Conversion failed"),
+            )
+
         return ConvertResponse(
-            status=result.get("status", "converted"),
-            conversion_results=result.get("results", ""),
-            compression_ratio=result.get("compression_ratio", 0.0),
-            quality_score=result.get("quality_score", 0.0),
+            status="converted",
+            conversion_results=result.get("conversion_results", ""),
+            compression_ratio=float(result.get("compression_ratio", 0.0)),
+            quality_score=float(result.get("quality_score", 0.0)),
         )
     except Exception as e:
-        logger.error(f"Convert error: {e}")
+        logger.error(f"Convert error: {e}", exc_info=True)
         return ConvertResponse(status="error", error_message=str(e))
 
 @app.post("/api/models/validate", response_model=ValidateResponse)
@@ -545,6 +557,18 @@ async def analyze_teacher_model(filename: str):
         return result
     except Exception as e:
         logger.error(f"Analyze teacher error: {e}")
+        return {"status": "error", "error": str(e)}
+
+@app.get("/api/models/student/{filename}")
+async def analyze_student_model(filename: str):
+    """Анализ Student модели из config.json и model_info.json"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].analyze_student_model(filename)
+        return result
+    except Exception as e:
+        logger.error(f"Analyze student error: {e}")
         return {"status": "error", "error": str(e)}
 
 if __name__ == "__main__":
