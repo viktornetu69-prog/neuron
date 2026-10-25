@@ -901,6 +901,12 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
   const [lastChecked, setLastChecked] = useState<string>('');
   const [showSystemSettings, setShowSystemSettings] = useState(false);
   const [loadingModel, setLoadingModel] = useState<'teacher' | 'student' | 'all' | null>(null);
+  const [loadProgress, setLoadProgress] = useState<{ active: boolean; progress: number; message: string; model: 'teacher' | 'student' | null }>({
+    active: false,
+    progress: 0,
+    message: '',
+    model: null,
+  });
 
   const fetchStatus = async () => {
     setStatusLoading(true);
@@ -918,6 +924,45 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
     }
   };
 
+  // Poll status with progress tracking
+  const waitForModelLoaded = async (modelType: 'teacher' | 'student') => {
+    let attempts = 0;
+    const maxAttempts = 30; // 30 секунд максимум
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      attempts++;
+
+      try {
+        const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+        const res = await fetch(`${apiUrl}/api/llm/status`);
+        const data = await res.json();
+
+        // Check if the correct model is loaded
+        if (data.model_loaded && data.model_type === modelType) {
+          setEngineStatus(data);
+          setLoadProgress({ active: false, progress: 100, message: '✅ Модель успешно загружена!', model: null });
+          return true;
+        }
+
+        // Progress estimation
+        const progress = Math.min(90, (attempts / maxAttempts) * 90);
+        setLoadProgress(prev => ({
+          ...prev,
+          progress,
+          message: `Загрузка... (${Math.floor(progress)}%)`,
+        }));
+      } catch (err) {
+        console.error('Status check error:', err);
+      }
+    }
+
+    // Timeout - return false
+    setLoadProgress({ active: false, progress: 0, message: '❌ Превышено время ожидания. Попробуйте ещё раз.', model: null });
+    return false;
+  };
+
+  // Auto-polling for status
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
@@ -968,18 +1013,24 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
 
   const handleLoadTeacher = async () => {
     setLoadingModel('teacher');
+    setLoadProgress({ active: true, progress: 10, message: 'Начало загрузки Teacher...', model: 'teacher' });
     try {
       const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
       const res = await fetch(`${apiUrl}/api/models/load/teacher`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        fetchStatus();
+        setLoadProgress(prev => ({ ...prev, progress: 50, message: 'Загрузка модели в память...' }));
+        // Poll status to check if model is loaded
+        const success = await waitForModelLoaded('teacher');
+        if (!success) {
+          alert('Не удалось загрузить Teacher. Проверьте наличие модели в папке models/teacher/');
+        }
       } else {
-        alert(data.error || 'Ошибка загрузки Teacher');
+        setLoadProgress({ active: false, progress: 0, message: '❌ ' + (data.error || 'Ошибка загрузки Teacher'), model: null });
       }
     } catch (err) {
       console.error('Load teacher error:', err);
-      alert('Не удалось загрузить Teacher');
+      setLoadProgress({ active: false, progress: 0, message: '❌ Не удалось загрузить Teacher', model: null });
     } finally {
       setLoadingModel(null);
     }
@@ -987,18 +1038,23 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
 
   const handleLoadStudent = async () => {
     setLoadingModel('student');
+    setLoadProgress({ active: true, progress: 10, message: 'Начало загрузки Student...', model: 'student' });
     try {
       const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
       const res = await fetch(`${apiUrl}/api/models/load/student`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        fetchStatus();
+        setLoadProgress(prev => ({ ...prev, progress: 50, message: 'Загрузка модели в память...' }));
+        const success = await waitForModelLoaded('student');
+        if (!success) {
+          alert('Не удалось загрузить Student. Проверьте наличие модели в папке models/student/');
+        }
       } else {
-        alert(data.error || 'Ошибка загрузки Student');
+        setLoadProgress({ active: false, progress: 0, message: '❌ ' + (data.error || 'Ошибка загрузки Student'), model: null });
       }
     } catch (err) {
       console.error('Load student error:', err);
-      alert('Не удалось загрузить Student');
+      setLoadProgress({ active: false, progress: 0, message: '❌ Не удалось загрузить Student', model: null });
     } finally {
       setLoadingModel(null);
     }
@@ -1006,21 +1062,65 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
 
   const handleLoadAll = async () => {
     setLoadingModel('all');
+    setLoadProgress({ active: true, progress: 10, message: 'Начало загрузки моделей...', model: null });
     try {
       const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
       const res = await fetch(`${apiUrl}/api/models/load-all`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        fetchStatus();
+        setLoadProgress(prev => ({ ...prev, progress: 50, message: 'Загрузка моделей в память...' }));
+        const teacherDone = await waitForModelLoaded('teacher');
+        setLoadProgress({ active: false, progress: 100, message: '✅ Модели загружены!', model: null });
       } else {
-        alert(data.error || 'Ошибка загрузки моделей');
+        setLoadProgress({ active: false, progress: 0, message: '❌ ' + (data.error || 'Ошибка загрузки моделей'), model: null });
       }
     } catch (err) {
       console.error('Load all error:', err);
-      alert('Не удалось загрузить модели');
+      setLoadProgress({ active: false, progress: 0, message: '❌ Не удалось загрузить модели', model: null });
     } finally {
       setLoadingModel(null);
     }
+  };
+
+  // Progress Bar Component
+  const ProgressBar = () => {
+    if (!loadProgress.active && loadProgress.progress !== 100) return null;
+
+    const isComplete = loadProgress.progress === 100;
+
+    return (
+      <div style={{
+        marginTop: 12,
+        padding: 12,
+        background: isComplete ? 'rgba(76, 175, 80, 0.1)' : 'rgba(124, 111, 247, 0.1)',
+        border: `1px solid ${isComplete ? '#4caf50' : '#1e1e30'}`,
+        borderRadius: 8,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: isComplete ? '#4caf50' : '#e8e8e8' }}>
+            {loadProgress.message}
+          </span>
+          <span style={{ fontSize: 12, color: '#8888aa' }}>
+            {loadProgress.progress}%
+          </span>
+        </div>
+        <div style={{
+          width: '100%',
+          height: 6,
+          background: '#1a1a2e',
+          borderRadius: 3,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${loadProgress.progress}%`,
+            height: '100%',
+            background: isComplete ? '#4caf50' : '#7c6ff7',
+            borderRadius: 3,
+            transition: 'width 0.3s ease',
+          }} />
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1098,18 +1198,18 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                     />
                     <button
                       onClick={handleLoadTeacher}
-                      disabled={loadingModel !== null}
+                      disabled={loadingModel !== null || loadProgress.active}
                       style={{
                         padding: '8px 16px',
                         background: engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '#4caf50' : '#7c6ff7',
                         border: 'none',
                         borderRadius: 6,
                         color: 'white',
-                        cursor: loadingModel !== null ? 'not-allowed' : 'pointer',
+                        cursor: loadingModel !== null || loadProgress.active ? 'not-allowed' : 'pointer',
                         fontSize: 12,
                         fontWeight: 600,
                         minWidth: 80,
-                        opacity: loadingModel !== null ? 0.5 : 1,
+                        opacity: loadingModel !== null || loadProgress.active ? 0.5 : 1,
                       }}
                     >
                       {loadingModel === 'teacher' ? '⏳...' : engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '✅' : '📥 Загрузить'}
@@ -1124,24 +1224,27 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                     />
                     <button
                       onClick={handleLoadStudent}
-                      disabled={loadingModel !== null}
+                      disabled={loadingModel !== null || loadProgress.active}
                       style={{
                         padding: '8px 16px',
                         background: engineStatus.model_type === 'student' && engineStatus.model_loaded ? '#4caf50' : '#7c6ff7',
                         border: 'none',
                         borderRadius: 6,
                         color: 'white',
-                        cursor: loadingModel !== null ? 'not-allowed' : 'pointer',
+                        cursor: loadingModel !== null || loadProgress.active ? 'not-allowed' : 'pointer',
                         fontSize: 12,
                         fontWeight: 600,
                         minWidth: 80,
-                        opacity: loadingModel !== null ? 0.5 : 1,
+                        opacity: loadingModel !== null || loadProgress.active ? 0.5 : 1,
                       }}
                     >
                       {loadingModel === 'student' ? '⏳...' : engineStatus.model_type === 'student' && engineStatus.model_loaded ? '✅' : '📥 Загрузить'}
                     </button>
                   </div>
                 </div>
+
+                {/* Progress Bar */}
+                <ProgressBar />
               </div>
 
               {/* Model Info */}

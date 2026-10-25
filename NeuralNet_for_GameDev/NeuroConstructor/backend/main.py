@@ -1069,6 +1069,8 @@ class LLMStatusResponse(BaseModel):
     model_loaded: bool = False
     model_path: str = ""
     model_size_gb: float = 0.0
+    model_type: str = ""  # "teacher" or "student"
+    gpu_layers: int = 0
     ollama_available: bool = False
     backend_status: str = ""
 
@@ -1120,10 +1122,12 @@ async def get_llm_status():
         
         return LLMStatusResponse(
             llama_cpp_available=llama_cpp_available,
-            model_loaded=len(model_files) > 0,
+            model_loaded=server_state["model_loaded"],
+            model_path=server_state["model_path"],
+            model_size_gb=server_state["model_info"].get("model_size_gb", 0),
+            model_type=server_state["model_info"].get("model_type", ""),
+            gpu_layers=0,
             backend_status="ready" if llama_cpp_available else "llama-cpp not installed",
-            model_path=model_files[0]["path"] if model_files else "",
-            model_size_gb=model_files[0]["size_gb"] if model_files else 0,
             ollama_available=ollama_available,
         )
     except Exception as e:
