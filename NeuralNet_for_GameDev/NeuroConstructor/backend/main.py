@@ -928,6 +928,20 @@ class LLMLoadResponse(BaseModel):
     model_size_gb: float = 0.0
     error: str = ""
 
+class ModelLoadAllRequest(BaseModel):
+    """Загрузка Teacher и Student одновременно"""
+    teacher_path: Optional[str] = None
+    student_path: Optional[str] = None
+
+class ModelLoadAllResponse(BaseModel):
+    success: bool = False
+    teacher_status: str = ""
+    student_status: str = ""
+    teacher_path: str = ""
+    student_path: str = ""
+    error: str = ""
+    timestamp: str = ""
+
 @app.post("/api/llm/load", response_model=LLMLoadResponse)
 async def load_model_to_engine(request: LLMLoadRequest):
     """Загрузить модель в LLM Engine (llama-cpp-python)"""
@@ -1190,6 +1204,168 @@ async def fine_tune_student(request: BenchmarkFineTuneRequest):
     except Exception as e:
         logger.error(f"Benchmark fine-tune error: {e}")
         return BenchmarkFineTuneResponse(status="error", error_message=str(e))
+
+# ============================================
+# Plugin Manager endpoints
+# ============================================
+
+# ============================================
+# Model Load endpoints
+# ============================================
+
+@app.post("/api/models/load/teacher", response_model=ModelLoadAllResponse)
+async def load_teacher_model_api():
+    """Загрузить Teacher модель в LLM Engine"""
+    try:
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+
+        if not LLAMA_CPP_AVAILABLE:
+            return ModelLoadAllResponse(
+                success=False,
+                teacher_status="error",
+                error="llama-cpp-python not installed"
+            )
+
+        # Find teacher models
+        teacher_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "NeuroConstructor.Core", "models", "teacher"
+        )
+
+        teacher_files = []
+        if os.path.exists(teacher_dir):
+            teacher_files = [f for f in os.listdir(teacher_dir) if f.endswith('.gguf')]
+
+        if not teacher_files:
+            return ModelLoadAllResponse(
+                success=False,
+                teacher_status="no_models",
+                error="No Teacher models found"
+            )
+
+        # Load first available model
+        teacher_file = teacher_files[0]
+        teacher_path = os.path.join(teacher_dir, teacher_file)
+
+        engine = LlamaCppEngine(
+            model_path=teacher_path,
+            n_gpu_layers=0,
+            n_threads=min(8, os.cpu_count() or 4),
+        )
+
+        # Save to server state
+        server_state["engine"] = engine
+        server_state["model_loaded"] = True
+        server_state["model_path"] = teacher_path
+        server_state["model_info"] = {"model_type": "teacher", "filename": teacher_file}
+
+        return ModelLoadAllResponse(
+            success=True,
+            teacher_status="loaded",
+            student_status="not_loaded",
+            teacher_path=teacher_path,
+            timestamp=datetime.now().isoformat()
+        )
+
+    except Exception as e:
+        logger.error(f"Load teacher error: {e}", exc_info=True)
+        return ModelLoadAllResponse(
+            success=False,
+            teacher_status="error",
+            error=str(e),
+            timestamp=datetime.now().isoformat()
+        )
+
+@app.post("/api/models/load/student", response_model=ModelLoadAllResponse)
+async def load_student_model_api():
+    """Загрузить Student модель в LLM Engine"""
+    try:
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+
+        if not LLAMA_CPP_AVAILABLE:
+            return ModelLoadAllResponse(
+                success=False,
+                student_status="error",
+                error="llama-cpp-python not installed"
+            )
+
+        # Find student models
+        student_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "NeuroConstructor.Core", "models", "student"
+        )
+
+        student_files = []
+        if os.path.exists(student_dir):
+            student_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')]
+
+        if not student_files:
+            return ModelLoadAllResponse(
+                success=False,
+                student_status="no_models",
+                error="No Student models found"
+            )
+
+        # Load first available model
+        student_file = student_files[0]
+        student_path = os.path.join(student_dir, student_file)
+
+        engine = LlamaCppEngine(
+            model_path=student_path,
+            n_gpu_layers=0,
+            n_threads=min(8, os.cpu_count() or 4),
+        )
+
+        # Save to server state
+        server_state["engine"] = engine
+        server_state["model_loaded"] = True
+        server_state["model_path"] = student_path
+        server_state["model_info"] = {"model_type": "student", "filename": student_file}
+
+        return ModelLoadAllResponse(
+            success=True,
+            teacher_status="not_loaded",
+            student_status="loaded",
+            student_path=student_path,
+            timestamp=datetime.now().isoformat()
+        )
+
+    except Exception as e:
+        logger.error(f"Load student error: {e}", exc_info=True)
+        return ModelLoadAllResponse(
+            success=False,
+            student_status="error",
+            error=str(e),
+            timestamp=datetime.now().isoformat()
+        )
+
+@app.post("/api/models/load-all", response_model=ModelLoadAllResponse)
+async def load_both_models_api():
+    """Загрузить Teacher и Student модели одновременно"""
+    try:
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+
+        if not LLAMA_CPP_AVAILABLE:
+            return ModelLoadAllResponse(
+                success=False,
+                error="llama-cpp-python not installed"
+            )
+
+        result = server_state["engine"].load_both_models() if server_state["engine"] else {"teacher_status": "error", "student_status": "error"}
+        return ModelLoadAllResponse(
+            success=result.get("teacher_status") == "loaded" and result.get("student_status") == "loaded",
+            teacher_status=result.get("teacher_status", "error"),
+            student_status=result.get("student_status", "error"),
+            timestamp=datetime.now().isoformat()
+        )
+
+    except Exception as e:
+        logger.error(f"Load all models error: {e}", exc_info=True)
+        return ModelLoadAllResponse(
+            success=False,
+            error=str(e),
+            timestamp=datetime.now().isoformat()
+        )
 
 # ============================================
 # Plugin Manager endpoints

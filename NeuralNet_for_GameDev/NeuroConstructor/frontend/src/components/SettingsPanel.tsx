@@ -900,6 +900,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
   const [statusLoading, setStatusLoading] = useState(false);
   const [lastChecked, setLastChecked] = useState<string>('');
   const [showSystemSettings, setShowSystemSettings] = useState(false);
+  const [loadingModel, setLoadingModel] = useState<'teacher' | 'student' | 'all' | null>(null);
 
   const fetchStatus = async () => {
     setStatusLoading(true);
@@ -964,6 +965,63 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
   };
 
   const isServerReachable = engineStatus !== null;
+
+  const handleLoadTeacher = async () => {
+    setLoadingModel('teacher');
+    try {
+      const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiUrl}/api/models/load/teacher`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        fetchStatus();
+      } else {
+        alert(data.error || 'Ошибка загрузки Teacher');
+      }
+    } catch (err) {
+      console.error('Load teacher error:', err);
+      alert('Не удалось загрузить Teacher');
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
+  const handleLoadStudent = async () => {
+    setLoadingModel('student');
+    try {
+      const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiUrl}/api/models/load/student`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        fetchStatus();
+      } else {
+        alert(data.error || 'Ошибка загрузки Student');
+      }
+    } catch (err) {
+      console.error('Load student error:', err);
+      alert('Не удалось загрузить Student');
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
+  const handleLoadAll = async () => {
+    setLoadingModel('all');
+    try {
+      const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiUrl}/api/models/load-all`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        fetchStatus();
+      } else {
+        alert(data.error || 'Ошибка загрузки моделей');
+      }
+    } catch (err) {
+      console.error('Load all error:', err);
+      alert('Не удалось загрузить модели');
+    } finally {
+      setLoadingModel(null);
+    }
+  };
 
   return (
     <div>
@@ -1031,18 +1089,58 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
               }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>📦 Состояние моделей</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <ModelStatusRow
-                    label="Teacher"
-                    icon="📦"
-                    loaded={engineStatus.model_type === 'teacher' && engineStatus.model_loaded}
-                    path={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
-                  />
-                  <ModelStatusRow
-                    label="Student"
-                    icon="🎓"
-                    loaded={engineStatus.model_type === 'student' && engineStatus.model_loaded}
-                    path={engineStatus.model_type === 'student' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <ModelStatusRow
+                      label="Teacher"
+                      icon="📦"
+                      loaded={engineStatus.model_type === 'teacher' && engineStatus.model_loaded}
+                      path={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
+                    />
+                    <button
+                      onClick={handleLoadTeacher}
+                      disabled={loadingModel !== null}
+                      style={{
+                        padding: '8px 16px',
+                        background: engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '#4caf50' : '#7c6ff7',
+                        border: 'none',
+                        borderRadius: 6,
+                        color: 'white',
+                        cursor: loadingModel !== null ? 'not-allowed' : 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        minWidth: 80,
+                        opacity: loadingModel !== null ? 0.5 : 1,
+                      }}
+                    >
+                      {loadingModel === 'teacher' ? '⏳...' : engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '✅' : '📥 Загрузить'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <ModelStatusRow
+                      label="Student"
+                      icon="🎓"
+                      loaded={engineStatus.model_type === 'student' && engineStatus.model_loaded}
+                      path={engineStatus.model_type === 'student' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
+                    />
+                    <button
+                      onClick={handleLoadStudent}
+                      disabled={loadingModel !== null}
+                      style={{
+                        padding: '8px 16px',
+                        background: engineStatus.model_type === 'student' && engineStatus.model_loaded ? '#4caf50' : '#7c6ff7',
+                        border: 'none',
+                        borderRadius: 6,
+                        color: 'white',
+                        cursor: loadingModel !== null ? 'not-allowed' : 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        minWidth: 80,
+                        opacity: loadingModel !== null ? 0.5 : 1,
+                      }}
+                    >
+                      {loadingModel === 'student' ? '⏳...' : engineStatus.model_type === 'student' && engineStatus.model_loaded ? '✅' : '📥 Загрузить'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
