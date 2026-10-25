@@ -582,6 +582,8 @@ class BenchmarkRunRequest(BaseModel):
     code_examples: int = 20
     creative_tasks: int = 20
     output_dir: str = "benchmarks"
+    teacher_model: str = ""
+    student_model: str = ""
 
 class BenchmarkRunResponse(BaseModel):
     status: str = ""
@@ -632,6 +634,8 @@ async def run_benchmark(request: BenchmarkRunRequest):
             code_examples=request.code_examples,
             creative_tasks=request.creative_tasks,
             output_dir=request.output_dir,
+            teacher_model=request.teacher_model,
+            student_model=request.student_model,
         )
         return BenchmarkRunResponse(
             status=result.get("status", "completed"),

@@ -27,11 +27,46 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     code_examples: 2,
     creative_tasks: 2,
     output_dir: 'benchmarks',
+    // LLM Engine settings
+    teacher_model: '',
+    student_model: '',
+    teacher_api_url: 'http://localhost:8000',
+    student_api_url: 'http://localhost:8000',
   });
+
+  const [teacherModels, setTeacherModels] = useState<any[]>([]);
+  const [studentModels, setStudentModels] = useState<any[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string>('');
+
+  // ===== Load models list =====
+  const loadModels = useCallback(async () => {
+    if (!isServerAvailable) return;
+
+    try {
+      const [teacherRes, studentRes] = await Promise.all([
+        fetch('http://localhost:8000/api/models/list?directory=teacher'),
+        fetch('http://localhost:8000/api/models/list?directory=student'),
+      ]);
+
+      const teacherData = await teacherRes.json();
+      const studentData = await studentRes.json();
+
+      setTeacherModels(teacherData.files || []);
+      setStudentModels(studentData.files || []);
+      setModelsLoaded(true);
+    } catch (err: any) {
+      console.error('Failed to load models:', err);
+    }
+  }, [isServerAvailable]);
+
+  // Load models on mount
+  React.useEffect(() => {
+    loadModels();
+  }, [loadModels]);
 
   // ===== Run benchmark =====
   const handleRun = useCallback(async () => {
@@ -44,11 +79,21 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     setError('');
     setResult(null);
 
+    const requestBody = {
+      qa_pairs: config.qa_pairs,
+      chat_dialogs: config.chat_dialogs,
+      code_examples: config.code_examples,
+      creative_tasks: config.creative_tasks,
+      output_dir: config.output_dir,
+      teacher_model: config.teacher_model,
+      student_model: config.student_model,
+    };
+
     try {
       const response = await fetch('http://localhost:8000/api/benchmark/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -264,7 +309,48 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
         {/* LEFT: Configuration */}
         <div style={styles.configPanel}>
           <div style={styles.section}>
-            <div style={styles.sectionTitle}>⚙️ Параметры</div>
+            <div style={styles.sectionTitle}>🤖 LLM Engine Settings</div>
+
+            <label style={styles.label}>Teacher Model</label>
+            <select
+              value={config.teacher_model}
+              onChange={(e) => setConfig(prev => ({ ...prev, teacher_model: e.target.value }))}
+              style={{ ...styles.input, marginBottom: 8 }}
+            >
+              <option value="">[Mock Mode — no model]</option>
+              {teacherModels.map((m: any) => (
+                <option key={m.filename} value={m.filename}>{m.filename}</option>
+              ))}
+            </select>
+
+            <label style={styles.label}>Student Model</label>
+            <select
+              value={config.student_model}
+              onChange={(e) => setConfig(prev => ({ ...prev, student_model: e.target.value }))}
+              style={{ ...styles.input, marginBottom: 8 }}
+            >
+              <option value="">[Mock Mode — no model]</option>
+              {studentModels.map((m: any) => (
+                <option key={m.filename} value={m.filename}>{m.filename}</option>
+              ))}
+            </select>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <button
+                onClick={loadModels}
+                disabled={loading}
+                style={{ ...styles.button, width: 'auto', marginTop: 0, padding: '6px 12px', fontSize: 12 }}
+              >
+                ⟳ Refresh
+              </button>
+              <span style={{ color: modelsLoaded ? '#4caf50' : '#666688', fontSize: 11 }}>
+                {modelsLoaded ? '✓ Models loaded' : '○ No models'}
+              </span>
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>⚙️ Parameters</div>
 
             <label style={styles.label}>QA пары</label>
             <input

@@ -594,6 +594,8 @@ class RESTEngine:
         code_examples: int = 20,
         creative_tasks: int = 20,
         output_dir: str = "benchmarks",
+        teacher_model: str = "",
+        student_model: str = "",
     ) -> Dict[str, Any]:
         """Run LM Benchmark: generate tests → run Teacher/Student → compare → report"""
         if not BENCHMARK_AVAILABLE or BenchmarkRunner is None:
@@ -610,6 +612,8 @@ class RESTEngine:
                 code_examples=code_examples,
                 creative_tasks=creative_tasks,
                 output_dir=output_dir,
+                teacher_model_path=os.path.join(self.MODELS_DIR, "teacher", teacher_model) if teacher_model else "",
+                student_model_path=os.path.join(self.MODELS_DIR, "student", student_model) if student_model else "",
             )
 
             runner = BenchmarkRunner()

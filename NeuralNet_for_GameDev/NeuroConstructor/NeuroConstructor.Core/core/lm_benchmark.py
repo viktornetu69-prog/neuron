@@ -12,11 +12,19 @@ Pipeline:
 
 import json
 import os
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any, Callable, Union
 from datetime import datetime
 from dataclasses import dataclass, field
 
 from answer_comparator import AnswerComparator, ComparisonEngine, BenchmarkReport
+
+# Import LLM Engine if available
+try:
+    from llm_engine import LLMEngine
+    LLM_ENGINE_AVAILABLE = True
+except ImportError:
+    LLM_ENGINE_AVAILABLE = False
+    LLMEngine = None
 
 
 @dataclass
@@ -29,6 +37,18 @@ class BenchmarkConfig:
     creative_tasks: int = 20
     pass_threshold: float = 0.85
     output_dir: str = "benchmarks"
+    # LLM Engine settings
+    teacher_engine_type: str = "mock"  # "mock", "llama_cpp", "ollama"
+    teacher_model_path: str = ""
+    teacher_api_url: str = "http://localhost:11434"
+    student_engine_type: str = "mock"
+    student_model_path: str = ""
+    student_api_url: str = "http://localhost:11434"
+    inference_params: Dict[str, Any] = field(default_factory=lambda: {
+        "max_tokens": 512,
+        "temperature": 0.7,
+        "top_p": 0.9,
+    })
 
 
 @dataclass
@@ -176,16 +196,50 @@ class BenchmarkRunner:
         self,
         teacher_fn: Optional[Callable] = None,
         student_fn: Optional[Callable] = None,
+        teacher_engine: Any = None,
+        student_engine: Any = None,
     ):
         """
         teacher_fn(question: str) -> str
         student_fn(question: str) -> str
-        If None, returns question as-is (mock mode).
+        teacher_engine: LLMEngine instance for Teacher
+        student_engine: LLMEngine instance for Student
+        If no functions or engines provided, uses mock mode.
         """
-        self.teacher_fn = teacher_fn or (lambda q: f"[Teacher] Answer for: {q}")
-        self.student_fn = student_fn or (lambda q: f"[Student] Answer for: {q}")
+        self.teacher_fn = teacher_fn
+        self.student_fn = student_fn
+        self.teacher_engine = teacher_engine
+        self.student_engine = student_engine
         self.comparator = ComparisonEngine()
         self.test_generator = TestGenerator()
+
+    def _generate_teacher_answer(self, question: str, config: BenchmarkConfig) -> str:
+        """Generate answer using LLM engine or mock function."""
+        if self.teacher_fn:
+            return self.teacher_fn(question)
+
+        if self.teacher_engine:
+            try:
+                return self.teacher_engine.generate(question, **config.inference_params)
+            except Exception as e:
+                return f"[Error] Teacher inference failed: {str(e)}"
+
+        # Mock mode
+        return f"[Teacher Mock] Answer for: {question}"
+
+    def _generate_student_answer(self, question: str, config: BenchmarkConfig) -> str:
+        """Generate answer using LLM engine or mock function."""
+        if self.student_fn:
+            return self.student_fn(question)
+
+        if self.student_engine:
+            try:
+                return self.student_engine.generate(question, **config.inference_params)
+            except Exception as e:
+                return f"[Error] Student inference failed: {str(e)}"
+
+        # Mock mode
+        return f"[Student Mock] Answer for: {question}"
 
     def run(
         self,
@@ -216,10 +270,10 @@ class BenchmarkRunner:
             question = test.get("question", test.get("prompt", ""))
 
             # Run Teacher
-            teacher_answer = self.teacher_fn(question)
+            teacher_answer = self._generate_teacher_answer(question, config)
 
             # Run Student
-            student_answer = self.student_fn(question)
+            student_answer = self._generate_student_answer(question, config)
 
             # Compare
             comp = self.comparator.compare(
