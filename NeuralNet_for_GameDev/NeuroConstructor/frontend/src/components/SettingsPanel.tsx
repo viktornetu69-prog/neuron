@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 // Types
 // ============================================================================
 
-type TabId = 'server' | 'teacher' | 'student' | 'chat' | 'benchmark' | 'system';
+type TabId = 'server' | 'teacher' | 'student' | 'chat' | 'benchmark' | 'engine';
 
 interface TabItem {
   id: TabId;
@@ -126,7 +126,7 @@ const TABS: TabItem[] = [
   { id: 'student', icon: '🎓', label: 'Student' },
   { id: 'chat', icon: '💬', label: 'Чат' },
   { id: 'benchmark', icon: '📊', label: 'Benchmark' },
-  { id: 'system', icon: 'ℹ️', label: 'Система' },
+  { id: 'engine', icon: '🔧', label: 'Engine' },
 ];
 
 // ============================================================================
@@ -895,7 +895,34 @@ function BenchmarkTab({ settings, setSettings }: { settings: AppSettings; setSet
   );
 }
 
-function SystemTab({ settings, setSettings }: { settings: AppSettings; setSettings: React.Dispatch<React.SetStateAction<AppSettings>> }) {
+function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettings: React.Dispatch<React.SetStateAction<AppSettings>> }) {
+  const [engineStatus, setEngineStatus] = useState<any>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [lastChecked, setLastChecked] = useState<string>('');
+  const [showSystemSettings, setShowSystemSettings] = useState(false);
+
+  const fetchStatus = async () => {
+    setStatusLoading(true);
+    try {
+      const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiUrl}/api/llm/status`);
+      const data = await res.json();
+      setEngineStatus(data);
+      setLastChecked(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.error('Failed to fetch LLM status:', err);
+      setEngineStatus(null);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, [settings.serverUrl]);
+
   const handleReset = () => {
     if (confirm('Сбросить все настройки к значениям по умолчанию?')) {
       localStorage.removeItem(STORAGE_KEY);
@@ -936,72 +963,175 @@ function SystemTab({ settings, setSettings }: { settings: AppSettings; setSettin
     input.click();
   };
 
+  const isServerReachable = engineStatus !== null;
+
   return (
     <div>
-      <Section title="Конфигурация" icon="💾">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button
-            onClick={handleExport}
-            style={{
-              padding: '10px 20px',
-              background: '#121220',
-              border: '1px solid #1e1e30',
-              borderRadius: 8,
-              color: '#e8e8e8',
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-            }}
-          >
-            📤 Экспорт настроек
-          </button>
-          <button
-            onClick={handleImport}
-            style={{
-              padding: '10px 20px',
-              background: '#121220',
-              border: '1px solid #1e1e30',
-              borderRadius: 8,
-              color: '#e8e8e8',
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-            }}
-          >
-            📥 Импорт настроек
-          </button>
-          <button
-            onClick={handleReset}
-            style={{
-              padding: '10px 20px',
-              background: 'rgba(244, 67, 54, 0.1)',
-              border: '1px solid #f44336',
-              borderRadius: 8,
-              color: '#f44336',
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-            }}
-          >
-            🗑 Сбросить настройки
-          </button>
+      <Section title="🤖 LLM Engine Status" icon="⚙️">
+        <div style={{
+          padding: 16,
+          background: isServerReachable ? '#0f0f1a' : '#1a1a2e',
+          borderRadius: 8,
+          border: `1px solid ${isServerReachable ? '#1e1e30' : '#f44336'}`,
+        }}>
+          {!isServerReachable ? (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: '#f44336' }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>⚠️</div>
+              <div style={{ fontSize: 13 }}>Сервер недоступен</div>
+              <button
+                onClick={fetchStatus}
+                disabled={statusLoading}
+                style={{
+                  marginTop: 12,
+                  padding: '8px 16px',
+                  background: '#121220',
+                  border: '1px solid #1e1e30',
+                  borderRadius: 6,
+                  color: '#e8e8e8',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                {statusLoading ? '...' : '🔄 Повторить'}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <span style={{ fontSize: 12, color: '#8888aa' }}>Последняя проверка: {lastChecked}</span>
+                <button
+                  onClick={fetchStatus}
+                  disabled={statusLoading}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#121220',
+                    border: '1px solid #1e1e30',
+                    borderRadius: 6,
+                    color: '#8888aa',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                  }}
+                >
+                  {statusLoading ? '...' : '🔄 Обновить'}
+                </button>
+              </div>
+
+              {/* Backend Status */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                <StatusBadge label="llama-cpp-python" value={engineStatus.llama_cpp_available ? '✅ Available' : '❌ Not installed'} color={engineStatus.llama_cpp_available ? '#4caf50' : '#f44336'} />
+                <StatusBadge label="Backend" value={engineStatus.backend_status || 'unknown'} color={engineStatus.backend_status === 'ready' ? '#4caf50' : '#ff9800'} />
+              </div>
+
+              {/* Model Loading States */}
+              <div style={{
+                padding: 12,
+                background: '#0a0a0f',
+                borderRadius: 8,
+                border: '1px solid #1e1e30',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#e8e8e8', marginBottom: 12 }}>📦 Состояние моделей</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <ModelStatusRow
+                    label="Teacher"
+                    icon="📦"
+                    loaded={engineStatus.model_type === 'teacher' && engineStatus.model_loaded}
+                    path={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
+                  />
+                  <ModelStatusRow
+                    label="Student"
+                    icon="🎓"
+                    loaded={engineStatus.model_type === 'student' && engineStatus.model_loaded}
+                    path={engineStatus.model_type === 'student' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
+                  />
+                </div>
+              </div>
+
+              {/* Model Info */}
+              {engineStatus.model_loaded && (
+                <div style={{
+                  marginTop: 12,
+                  padding: 10,
+                  background: 'rgba(124, 111, 247, 0.1)',
+                  borderLeft: '3px solid #7c6ff7',
+                  borderRadius: '0 6px 6px 0',
+                  fontSize: 12,
+                  color: '#8888aa',
+                }}>
+                  <div style={{ color: '#e8e8e8', marginBottom: 4 }}>Текущая модель: {engineStatus.model_path}</div>
+                  <div>GPU layers: {engineStatus.gpu_layers || 0} | Size: {engineStatus.model_size_gb || 0} GB</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Section>
-      <Section title="О системе" icon="ℹ️">
-        <SettingRow label="Версия" badge="info">NeuroConstructor v0.9.2</SettingRow>
-        <SettingRow label="Пайплайн">Teacher → Dataset → Student (Q4_0)</SettingRow>
-        <SettingRow label="Backend">FastAPI + LlamaCpp</SettingRow>
-        <SettingRow label="Хранилище настроек">localStorage (browser)</SettingRow>
+
+      <Section title="Системные настройки" icon="💾">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={handleExport} style={systemButtonStyle}>📤 Экспорт настроек</button>
+          <button onClick={handleImport} style={systemButtonStyle}>📥 Импорт настроек</button>
+          <button onClick={handleReset} style={{ ...systemButtonStyle, background: 'rgba(244, 67, 54, 0.1)', border: '1px solid #f44336', color: '#f44336' }}>🗑 Сбросить настройки</button>
+        </div>
       </Section>
+    </div>
+  );
+}
+
+const systemButtonStyle: React.CSSProperties = {
+  padding: '10px 20px',
+  background: '#121220',
+  border: '1px solid #1e1e30',
+  borderRadius: 8,
+  color: '#e8e8e8',
+  fontSize: 13,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+};
+
+function StatusBadge({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div style={{
+      flex: 1,
+      padding: '8px 12px',
+      background: '#0a0a0f',
+      borderRadius: 6,
+      border: '1px solid #1e1e30',
+    }}>
+      <div style={{ fontSize: 11, color: '#8888aa', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color }}>{value}</div>
+    </div>
+  );
+}
+
+function ModelStatusRow({ label, icon, loaded, path }: { label: string; icon: string; loaded: boolean; path?: string }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '8px 12px',
+      background: loaded ? 'rgba(76, 175, 80, 0.1)' : '#121220',
+      border: `1px solid ${loaded ? '#4caf50' : '#1e1e30'}`,
+      borderRadius: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>{icon}</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: loaded ? '#4caf50' : '#8888aa' }}>{label}</span>
+        {loaded && path && <span style={{ fontSize: 11, color: '#8888aa' }}>→ {path.split('\\').pop()}</span>}
+      </div>
+      <span style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '2px 8px',
+        borderRadius: 4,
+        background: loaded ? 'rgba(76, 175, 80, 0.2)' : 'rgba(136, 136, 170, 0.2)',
+        color: loaded ? '#4caf50' : '#8888aa',
+      }}>
+        {loaded ? '✅ Загружена' : '○ Не загружена'}
+      </span>
     </div>
   );
 }
@@ -1039,8 +1169,8 @@ export function SettingsPanel() {
         return <ChatTab settings={settings} setSettings={setSettings} />;
       case 'benchmark':
         return <BenchmarkTab settings={settings} setSettings={setSettings} />;
-      case 'system':
-        return <SystemTab settings={settings} setSettings={setSettings} />;
+      case 'engine':
+        return <EngineTab settings={settings} setSettings={setSettings} />;
       default:
         return null;
     }
