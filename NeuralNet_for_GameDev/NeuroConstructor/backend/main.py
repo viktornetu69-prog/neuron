@@ -249,16 +249,16 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
     logger.info(f"Creating student from scratch: {request.model_family}")
 
     # Для создания Student с нуля engine НЕ требуется — только сохраняем конфиг
-    
+
     try:
         # Получаем корневую папку проекта (NeuroConstructor/)
         backend_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(backend_dir)
-        
-        # Путь для Student: NeuroConstructor/models/student/
-        student_dir = os.path.join(project_root, "models", "student")
+
+        # Путь для Student: NeuroConstructor/NeuroConstructor.Core/models/student/
+        student_dir = os.path.join(project_root, "NeuroConstructor.Core", "models", "student")
         os.makedirs(student_dir, exist_ok=True)
-        
+
         logger.info(f"Student dir: {student_dir}")
         
         # Создаём конфигурацию Student модели

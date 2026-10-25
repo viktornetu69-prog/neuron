@@ -1,5 +1,7 @@
 {
   "model_type": "student",
+  "format": "template",
+  "path": "C:\\Users\\user\\Desktop\\neuron\\NeuralNet_for_GameDev\\NeuroConstructor\\NeuroConstructor.Core\\models\\student",
   "architecture": {
     "model_family": "qwen3",
     "vocab_size": 32000,
@@ -11,11 +13,6 @@
     "max_position_embeddings": 2048,
     "rope_theta": 10000.0
   },
-  "loading": {
-    "initialized": true,
-    "weights_loaded": false,
-    "compression_applied": false
-  },
   "compression": {
     "applied": false,
     "method": "none",
@@ -23,7 +20,7 @@
     "specialized_layers": []
   },
   "metadata": {
-    "created": "2026-10-25T09:03:27.052698",
+    "created": "2026-10-25T09:07:18.012245",
     "version": "stage6.0",
     "type": "student_template"
   }
