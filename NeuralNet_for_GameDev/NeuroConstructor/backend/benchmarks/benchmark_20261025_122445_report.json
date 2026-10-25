@@ -1,0 +1,440 @@
+{
+  "config": {
+    "test_count": 120,
+    "qa_pairs": 5,
+    "chat_dialogs": 3,
+    "code_examples": 2,
+    "creative_tasks": 2,
+    "pass_threshold": 0.85
+  },
+  "total_tests": 12,
+  "passed": 0,
+  "failed": 12,
+  "pass_rate": 0.0,
+  "overall_similarity": 82.48,
+  "teacher_model": "",
+  "student_model": "",
+  "fine_tuning_needed": true,
+  "timestamp": "2026-10-25T12:24:45.075149",
+  "report": {
+    "total_tests": 12,
+    "passed": 0,
+    "failed": 12,
+    "pass_rate": 0.0,
+    "overall_similarity": 82.48,
+    "metrics": {
+      "avg_cosine_char": 84.22,
+      "avg_cosine_word": 77.78,
+      "avg_bleu": 65.8,
+      "avg_rouge_l": 90.0,
+      "avg_token_f1": 90.0
+    },
+    "distribution": {
+      "excellent_95_100": 0,
+      "good_85_95": 0,
+      "mediocre_70_85": 12,
+      "poor_below_70": 0
+    },
+    "exact_matches": 0,
+    "worst_cases": [
+      {
+        "test_id": "qa_001",
+        "question": "Что такое нейросеть?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_002",
+        "question": "Как работает обратное распространение ошибки?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_003",
+        "question": "Что такое квантификация моделей?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_004",
+        "question": "Чем Teacher-модель отличается от Student?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_005",
+        "question": "Что такое GGUF формат?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "chat_006",
+        "question": "Привет! Как дела?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "chat_007",
+        "question": "Что ты умеешь?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "chat_008",
+        "question": "Расскажи о себе",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "code_009",
+        "question": "Напиши функцию для нормализации массива",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "code_010",
+        "question": "Как посчитать cosine similarity в Python?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      }
+    ],
+    "individual_results": [
+      {
+        "test_id": "qa_001",
+        "question": "Что такое нейросеть?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_002",
+        "question": "Как работает обратное распространение ошибки?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_003",
+        "question": "Что такое квантификация моделей?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_004",
+        "question": "Чем Teacher-модель отличается от Student?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "qa_005",
+        "question": "Что такое GGUF формат?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "chat_006",
+        "question": "Привет! Как дела?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "chat_007",
+        "question": "Что ты умеешь?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "chat_008",
+        "question": "Расскажи о себе",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "code_009",
+        "question": "Напиши функцию для нормализации массива",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "code_010",
+        "question": "Как посчитать cosine similarity в Python?",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "creative_011",
+        "question": "Опиши как работает обучение нейросети",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      },
+      {
+        "test_id": "creative_012",
+        "question": "Объясни разницу между CNN и RNN",
+        "teacher_answer": "[Error] Teacher inference failed: Engine not initialized",
+        "student_answer": "[Error] Student inference failed: Engine not initialized",
+        "metrics": {
+          "cosine_similarity_char": 0.8422,
+          "cosine_similarity_word": 0.7778,
+          "bleu_score": 0.658,
+          "rouge_l": 0.9,
+          "exact_match": 0.0,
+          "token_precision": 0.9,
+          "token_recall": 0.9,
+          "token_f1": 0.9
+        },
+        "passed": false,
+        "overall_score": 0.8248
+      }
+    ]
+  }
+}

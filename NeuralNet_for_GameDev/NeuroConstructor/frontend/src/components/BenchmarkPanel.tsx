@@ -77,6 +77,52 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     }
   }, [isServerAvailable]);
 
+  // ===== Load model into LLM Engine =====
+  const handleLoadModel = useCallback(async (modelType: 'teacher' | 'student') => {
+    if (!isServerAvailable) {
+      setError('Сервер недоступен');
+      return;
+    }
+
+    const modelName = modelType === 'teacher' ? config.teacher_model : config.student_model;
+    if (!modelName) {
+      setError(`Выберите ${modelType === 'teacher' ? 'Teacher' : 'Student'} модель`);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('http://localhost:8000/api/llm/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_path: `models/${modelType}/${modelName}`,
+          model_type: modelType,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setLlmStatus(prev => ({
+          ...prev,
+          model_loaded: true,
+          model_path: data.model_path || prev?.model_path || '',
+          model_size_gb: data.model_size_gb || prev?.model_size_gb || 0,
+        }));
+        setError('');
+      } else {
+        setError(data.error || `Failed to load ${modelType} model`);
+      }
+    } catch (err: any) {
+      setError(`Ошибка загрузки модели: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [isServerAvailable, config.teacher_model, config.student_model]);
+
   // Load models on mount
   React.useEffect(() => {
     loadModels();
@@ -348,8 +394,11 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
                 </div>
                 <div style={styles.metricRow}>
                   <span style={styles.metricLabel}>Teacher model</span>
-                  <span style={styles.metricValue}>
-                    {llmStatus.model_loaded ? '✅ Loaded' : '○ None'}
+                  <span style={{
+                    ...styles.metricValue,
+                    color: llmStatus.model_loaded ? '#4caf50' : '#8888aa',
+                  }}>
+                    {llmStatus.model_loaded ? '✅ Loaded' : '○ Not loaded'}
                   </span>
                 </div>
                 {llmStatus.model_path && (
@@ -374,36 +423,53 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
               onChange={(e) => setConfig(prev => ({ ...prev, teacher_model: e.target.value }))}
               style={{ ...styles.input, marginBottom: 8 }}
             >
-              <option value="">[Mock Mode — no model]</option>
+              <option value="">[— Выбрать модель —]</option>
               {teacherModels.map((m: any) => (
                 <option key={m.filename} value={m.filename}>{m.filename}</option>
               ))}
             </select>
 
-            <label style={styles.label}>Student Model</label>
+            <button
+              onClick={() => handleLoadModel('teacher')}
+              disabled={!config.teacher_model || loading || !isServerAvailable}
+              style={{
+                ...styles.button,
+                marginTop: 4,
+                padding: '6px 12px',
+                fontSize: 12,
+                width: 'auto',
+                opacity: (!config.teacher_model || loading || !isServerAvailable) ? 0.5 : 1,
+              }}
+            >
+              {loading ? '⏳ Loading...' : '🔄 Загрузить в LLM Engine'}
+            </button>
+
+            <label style={{ ...styles.label, marginTop: 16 }}>Student Model</label>
             <select
               value={config.student_model}
               onChange={(e) => setConfig(prev => ({ ...prev, student_model: e.target.value }))}
               style={{ ...styles.input, marginBottom: 8 }}
             >
-              <option value="">[Mock Mode — no model]</option>
+              <option value="">[— Выбрать модель —]</option>
               {studentModels.map((m: any) => (
                 <option key={m.filename} value={m.filename}>{m.filename}</option>
               ))}
             </select>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-              <button
-                onClick={loadModels}
-                disabled={loading}
-                style={{ ...styles.button, width: 'auto', marginTop: 0, padding: '6px 12px', fontSize: 12 }}
-              >
-                ⟳ Refresh
-              </button>
-              <span style={{ color: modelsLoaded ? '#4caf50' : '#666688', fontSize: 11 }}>
-                {modelsLoaded ? '✓ Models loaded' : '○ No models'}
-              </span>
-            </div>
+            <button
+              onClick={() => handleLoadModel('student')}
+              disabled={!config.student_model || loading || !isServerAvailable}
+              style={{
+                ...styles.button,
+                marginTop: 4,
+                padding: '6px 12px',
+                fontSize: 12,
+                width: 'auto',
+                opacity: (!config.student_model || loading || !isServerAvailable) ? 0.5 : 1,
+              }}
+            >
+              {loading ? '⏳ Loading...' : '🔄 Загрузить в LLM Engine'}
+            </button>
           </div>
 
           <div style={styles.section}>

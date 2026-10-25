@@ -572,6 +572,70 @@ async def analyze_student_model(filename: str):
         return {"status": "error", "error": str(e)}
 
 # ============================================
+# LLM Engine endpoints
+# ============================================
+
+class LLMLoadRequest(BaseModel):
+    model_path: str
+    model_type: str = "teacher"  # "teacher" or "student"
+
+class LLMLoadResponse(BaseModel):
+    success: bool = False
+    model_path: str = ""
+    model_size_gb: float = 0.0
+    error: str = ""
+
+@app.post("/api/llm/load", response_model=LLMLoadResponse)
+async def load_model_to_engine(request: LLMLoadRequest):
+    """Загрузить модель в LLM Engine (llama-cpp-python)"""
+    try:
+        from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+        import os
+        
+        if not LLAMA_CPP_AVAILABLE:
+            return LLMLoadResponse(
+                success=False,
+                error="llama-cpp-python not installed"
+            )
+        
+        # Resolve model path
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        full_path = os.path.join(project_root, request.model_path)
+        
+        if not os.path.exists(full_path):
+            return LLMLoadResponse(
+                success=False,
+                error=f"Model file not found: {full_path}"
+            )
+        
+        # Load model
+        engine = LlamaCppEngine(
+            model_path=full_path,
+            n_gpu_layers=-1,  # Offload all to GPU
+            n_threads=8,
+        )
+        
+        # Verify it loads
+        if engine.model:
+            return LLMLoadResponse(
+                success=True,
+                model_path=full_path,
+                model_size_gb=round(os.path.getsize(full_path) / (1024**3), 2),
+            )
+        else:
+            return LLMLoadResponse(
+                success=False,
+                error="Model failed to initialize"
+            )
+            
+    except Exception as e:
+        return LLMLoadResponse(
+            success=False,
+            error=str(e)
+        )
+
+# ============================================
 # Benchmark endpoints (LM Benchmark — Stage 1)
 # ============================================
 

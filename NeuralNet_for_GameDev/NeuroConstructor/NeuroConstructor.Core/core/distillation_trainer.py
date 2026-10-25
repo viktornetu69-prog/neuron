@@ -25,6 +25,8 @@ except ImportError:
     torch = None
     nn = None
     optim = None
+    Dataset = None
+    DataLoader = None
     TORCH_AVAILABLE = False
 
 
@@ -69,7 +71,7 @@ class TrainingMetrics:
         }
 
 
-class DistillationDataset(Dataset):
+class DistillationDataset:
     """Dataset for distillation training."""
 
     def __init__(self, data: List[Dict[str, str]]):
@@ -85,6 +87,11 @@ class DistillationDataset(Dataset):
             "teacher_answer": item.get("teacher_answer", item.get("expected", "")),
             "student_answer": item.get("student_answer", item.get("actual", "")),
         }
+
+
+class _TorchDistillationDataset:
+    """Real PyTorch Dataset — only used when torch is available."""
+    pass
 
 
 class DistillationTrainer:
@@ -159,12 +166,12 @@ class DistillationTrainer:
 
         model.train()
 
-        # Create DataLoader
-        dataset = DistillationDataset(train_data)
-        dataloader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
-
-        for batch in dataloader:
-            optimizer.zero_grad()
+        # Create dataloader (using simple iteration if torch DataLoader not available)
+        if DataLoader:
+            dataset = DistillationDataset(train_data)
+            dataloader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
+            for batch in dataloader:
+                optimizer.zero_grad()
 
             # Forward pass
             losses = []
