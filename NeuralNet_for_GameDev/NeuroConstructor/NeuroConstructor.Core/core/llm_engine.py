@@ -151,24 +151,6 @@ class LLMEngine:
     @classmethod
     def mock(cls) -> "LLMEngine":
         """Create mock LLM Engine for testing."""
-        return MockEngine()
-
-        # Test connection
-        try:
-            resp = requests.get(f"{url}/api/tags", timeout=5)
-            if resp.status_code == 200:
-                engine._initialized = True
-                engine.model_name = model
-            else:
-                raise RuntimeError(f"Ollama API error: {resp.status_code}")
-        except Exception as e:
-            raise RuntimeError(f"Cannot connect to Ollama at {url}: {str(e)}")
-
-        return engine
-
-    @classmethod
-    def mock(cls) -> "LLMEngine":
-        """Create mock LLM Engine for testing."""
         engine = cls(backend="mock", config=InferenceConfig())
         engine._initialized = True
         return engine
@@ -194,15 +176,18 @@ class LlamaCppEngine(LLMEngine):
         self.n_gpu_layers = n_gpu_layers
         self.n_threads = n_threads
         self.model = None
+        # Auto-init
+        self.init()
 
     def init(self) -> bool:
         if not LLAMA_CPP_AVAILABLE:
             raise ImportError("llama-cpp-python is not installed")
 
         try:
+            gpu = self.n_gpu_layers if self.n_gpu_layers >= 0 else 0  # Fallback to CPU
             self.model = Llama(
                 model_path=self.model_path,
-                n_gpu_layers=self.n_gpu_layers,
+                n_gpu_layers=gpu,
                 n_threads=self.n_threads,
                 n_ctx=self.config.n_ctx if self.config else 2048,
             )
@@ -210,9 +195,11 @@ class LlamaCppEngine(LLMEngine):
             self._initialized = True
             return True
         except Exception as e:
+            print(f"LlamaCppEngine init error: {e}")
             raise RuntimeError(f"Failed to load GGUF model: {str(e)}")
 
-    def generate(self, prompt: str, **kwargs) -> InferenceResult:
+    def generate_stream(self, prompt: str, **kwargs):
+        """Генерация потока токенов (streaming)"""
         if not self._initialized or not self.model:
             raise RuntimeError("Engine not initialized")
 
@@ -225,34 +212,33 @@ class LlamaCppEngine(LLMEngine):
             max_tokens = kwargs.get("max_tokens", gen_config.max_tokens)
             top_p = kwargs.get("top_p", gen_config.top_p)
 
-            result = self.model.create_chat_completion(
-                messages=[{"role": "user", "content": prompt}],
+            # Stream: create_completion returns generator
+            stream = self.model.create_completion(
+                prompt=prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
                 stop=gen_config.stop_sequences,
+                stream=True,  # ← Включаем streaming
             )
 
-            text = result["choices"][0]["message"]["content"]
+            full_text = ""
+            for chunk in stream:
+                text = chunk.get("choices", [{}])[0].get("text", "")
+                if text:
+                    full_text += text
+                    yield {"token": text, "full_text": full_text}
+
             inference_time = (time.time() - start_time) * 1000
-
-            return InferenceResult(
-                text=text,
-                tokens_generated=len(text.split()),
-                inference_time_ms=inference_time,
-                model_name=self.model_name,
-                success=True,
-            )
+            yield {
+                "done": True,
+                "full_text": full_text,
+                "tokens_generated": len(full_text.split()),
+                "inference_time_ms": inference_time,
+            }
 
         except Exception as e:
-            return InferenceResult(
-                text="",
-                tokens_generated=0,
-                inference_time_ms=(time.time() - start_time) * 1000,
-                model_name=self.model_name,
-                success=False,
-                error=str(e),
-            )
+            yield {"error": str(e)}
 
 
 # ─── Ollama Backend ──────────────────────────────────────────────────────────

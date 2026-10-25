@@ -6,6 +6,7 @@ interface SidebarProps {
   onPanelChange: (panel: string) => void;
   onCheckServer: () => void;
   onToggle: () => void;
+  onOpenSettings?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -15,9 +16,10 @@ const NAV_ITEMS = [
   { id: 'benchmark', icon: '📈', label: 'Benchmark' },
   { id: 'stage6', icon: '⚡', label: 'Stage 6' },
   { id: 'plugins', icon: '🔌', label: 'Плагины' },
+  { id: 'settings', icon: '⚙️', label: 'Настройки' },
 ];
 
-function Strip({ activePanel, onPanelChange, onCheckServer, onToggle }: Omit<SidebarProps, 'expanded'>) {
+function Strip({ activePanel, onPanelChange, onCheckServer, onToggle, onOpenSettings }: Omit<SidebarProps, 'expanded'>) {
   return (
     <div style={{
       width: 56,
@@ -78,6 +80,7 @@ function Strip({ activePanel, onPanelChange, onCheckServer, onToggle }: Omit<Sid
       </button>
       {/* Настройки */}
       <button
+        onClick={onOpenSettings}
         title="Настройки"
         style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -91,7 +94,7 @@ function Strip({ activePanel, onPanelChange, onCheckServer, onToggle }: Omit<Sid
   );
 }
 
-function ExpandedPanel({ activePanel, onPanelChange }: Omit<SidebarProps, 'onCheckServer' | 'onToggle'>) {
+function ExpandedPanel({ activePanel, onPanelChange, onOpenSettings }: { activePanel: string; onPanelChange: (panel: string) => void; onOpenSettings?: () => void }) {
   return (
     <div style={{
       width: 204,
@@ -153,7 +156,7 @@ function ExpandedPanel({ activePanel, onPanelChange }: Omit<SidebarProps, 'onChe
         }}>
           <span style={{ fontSize: 16 }}>🗑</span> Архив
         </button>
-        <button style={{
+        <button onClick={onOpenSettings} style={{
           width: '100%', height: 36, display: 'flex', alignItems: 'center', gap: 10,
           padding: '0 12px', background: 'transparent', border: 'none', borderRadius: 8,
           cursor: 'pointer', color: '#8888aa', fontSize: 13, fontWeight: 400, textAlign: 'left',
@@ -165,7 +168,7 @@ function ExpandedPanel({ activePanel, onPanelChange }: Omit<SidebarProps, 'onChe
   );
 }
 
-export function Sidebar({ expanded, activePanel, onPanelChange, onCheckServer, onToggle }: SidebarProps) {
+export function Sidebar({ expanded, activePanel, onPanelChange, onCheckServer, onToggle, onOpenSettings }: SidebarProps) {
   return (
     <div style={{
       height: '100%',
@@ -178,8 +181,8 @@ export function Sidebar({ expanded, activePanel, onPanelChange, onCheckServer, o
       transition: 'width 0.25s ease',
       width: expanded ? 260 : 56,
     }}>
-      {!expanded && <Strip activePanel={activePanel} onPanelChange={onPanelChange} onCheckServer={onCheckServer} onToggle={onToggle} />}
-      {expanded && <ExpandedPanel activePanel={activePanel} onPanelChange={onPanelChange} />}
+      {!expanded && <Strip activePanel={activePanel} onPanelChange={onPanelChange} onCheckServer={onCheckServer} onToggle={onToggle} onOpenSettings={onOpenSettings} />}
+      {expanded && <ExpandedPanel activePanel={activePanel} onPanelChange={onPanelChange} onOpenSettings={onOpenSettings} />}
     </div>
   );
 }

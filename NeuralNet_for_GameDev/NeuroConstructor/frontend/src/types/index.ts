@@ -113,3 +113,30 @@ export interface StudentAnalysisResult {
   info_error?: string;
   error?: string;
 }
+
+// ============================================================================
+// Chat modes
+// ============================================================================
+
+export type ChatMode = 'human-teacher' | 'human-student' | 'human-teacher-student' | 'teacher-student';
+
+export interface ChatMessage {
+  role: 'human' | 'teacher' | 'student';
+  content: string;
+  timestamp: string;
+}
+
+export interface ChatHistoryEntry {
+  id: string;
+  mode: ChatMode;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeacherStudentChatResponse {
+  teacher_response: string;
+  student_response: string;
+  teacher_thinking?: string;
+  student_thinking?: string;
+}

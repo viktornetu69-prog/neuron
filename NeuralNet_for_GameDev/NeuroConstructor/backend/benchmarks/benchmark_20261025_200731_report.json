@@ -1,0 +1,440 @@
+{
+  "config": {
+    "test_count": 120,
+    "qa_pairs": 5,
+    "chat_dialogs": 3,
+    "code_examples": 2,
+    "creative_tasks": 2,
+    "pass_threshold": 0.85
+  },
+  "total_tests": 12,
+  "passed": 0,
+  "failed": 12,
+  "pass_rate": 0.0,
+  "overall_similarity": 20.85,
+  "teacher_model": "",
+  "student_model": "",
+  "fine_tuning_needed": true,
+  "timestamp": "2026-10-25T20:07:31.535846",
+  "report": {
+    "total_tests": 12,
+    "passed": 0,
+    "failed": 12,
+    "pass_rate": 0.0,
+    "overall_similarity": 20.85,
+    "metrics": {
+      "avg_cosine_char": 5.77,
+      "avg_cosine_word": 0.0,
+      "avg_bleu": 64.93,
+      "avg_rouge_l": 23.82,
+      "avg_token_f1": 24.51
+    },
+    "distribution": {
+      "excellent_95_100": 0,
+      "good_85_95": 0,
+      "mediocre_70_85": 0,
+      "poor_below_70": 12
+    },
+    "exact_matches": 0,
+    "worst_cases": [
+      {
+        "test_id": "chat_008",
+        "question": "Расскажи о себе",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Расскажи о себе",
+        "metrics": {
+          "cosine_similarity_char": 0.0575,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.5483,
+          "rouge_l": 0.2609,
+          "exact_match": 0.0,
+          "token_precision": 0.3,
+          "token_recall": 0.2308,
+          "token_f1": 0.2609
+        },
+        "passed": false,
+        "overall_score": 0.201
+      },
+      {
+        "test_id": "code_010",
+        "question": "Как посчитать cosine similarity в Python?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Как посчитать cosine similarity в Python?",
+        "metrics": {
+          "cosine_similarity_char": 0.0448,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6804,
+          "rouge_l": 0.2222,
+          "exact_match": 0.0,
+          "token_precision": 0.2143,
+          "token_recall": 0.2308,
+          "token_f1": 0.2222
+        },
+        "passed": false,
+        "overall_score": 0.2021
+      },
+      {
+        "test_id": "qa_001",
+        "question": "Что такое нейросеть?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что такое нейросеть?",
+        "metrics": {
+          "cosine_similarity_char": 0.0542,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6025,
+          "rouge_l": 0.25,
+          "exact_match": 0.0,
+          "token_precision": 0.2727,
+          "token_recall": 0.2308,
+          "token_f1": 0.25
+        },
+        "passed": false,
+        "overall_score": 0.2039
+      },
+      {
+        "test_id": "chat_007",
+        "question": "Что ты умеешь?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что ты умеешь?",
+        "metrics": {
+          "cosine_similarity_char": 0.0583,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6025,
+          "rouge_l": 0.25,
+          "exact_match": 0.0,
+          "token_precision": 0.2727,
+          "token_recall": 0.2308,
+          "token_f1": 0.25
+        },
+        "passed": false,
+        "overall_score": 0.2049
+      },
+      {
+        "test_id": "code_009",
+        "question": "Напиши функцию для нормализации массива",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Напиши функцию для нормализации массива",
+        "metrics": {
+          "cosine_similarity_char": 0.0455,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.205
+      },
+      {
+        "test_id": "creative_011",
+        "question": "Опиши как работает обучение нейросети",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Опиши как работает обучение нейросети",
+        "metrics": {
+          "cosine_similarity_char": 0.0462,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2051
+      },
+      {
+        "test_id": "qa_003",
+        "question": "Что такое квантификация моделей?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что такое квантификация моделей?",
+        "metrics": {
+          "cosine_similarity_char": 0.0482,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2056
+      },
+      {
+        "test_id": "qa_005",
+        "question": "Что такое GGUF формат?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что такое GGUF формат?",
+        "metrics": {
+          "cosine_similarity_char": 0.0531,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2069
+      },
+      {
+        "test_id": "qa_002",
+        "question": "Как работает обратное распространение ошибки?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Как работает обратное распространение ошибки?",
+        "metrics": {
+          "cosine_similarity_char": 0.0429,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6931,
+          "rouge_l": 0.2308,
+          "exact_match": 0.0,
+          "token_precision": 0.2308,
+          "token_recall": 0.2308,
+          "token_f1": 0.2308
+        },
+        "passed": false,
+        "overall_score": 0.207
+      },
+      {
+        "test_id": "chat_006",
+        "question": "Привет! Как дела?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Привет! Как дела?",
+        "metrics": {
+          "cosine_similarity_char": 0.0561,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2076
+      }
+    ],
+    "individual_results": [
+      {
+        "test_id": "qa_001",
+        "question": "Что такое нейросеть?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что такое нейросеть?",
+        "metrics": {
+          "cosine_similarity_char": 0.0542,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6025,
+          "rouge_l": 0.25,
+          "exact_match": 0.0,
+          "token_precision": 0.2727,
+          "token_recall": 0.2308,
+          "token_f1": 0.25
+        },
+        "passed": false,
+        "overall_score": 0.2039
+      },
+      {
+        "test_id": "qa_002",
+        "question": "Как работает обратное распространение ошибки?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Как работает обратное распространение ошибки?",
+        "metrics": {
+          "cosine_similarity_char": 0.0429,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6931,
+          "rouge_l": 0.2308,
+          "exact_match": 0.0,
+          "token_precision": 0.2308,
+          "token_recall": 0.2308,
+          "token_f1": 0.2308
+        },
+        "passed": false,
+        "overall_score": 0.207
+      },
+      {
+        "test_id": "qa_003",
+        "question": "Что такое квантификация моделей?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что такое квантификация моделей?",
+        "metrics": {
+          "cosine_similarity_char": 0.0482,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2056
+      },
+      {
+        "test_id": "qa_004",
+        "question": "Чем Teacher-модель отличается от Student?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Чем Teacher-модель отличается от Student?",
+        "metrics": {
+          "cosine_similarity_char": 0.1373,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.7186,
+          "rouge_l": 0.2143,
+          "exact_match": 0.0,
+          "token_precision": 0.2857,
+          "token_recall": 0.3077,
+          "token_f1": 0.2963
+        },
+        "passed": false,
+        "overall_score": 0.2442
+      },
+      {
+        "test_id": "qa_005",
+        "question": "Что такое GGUF формат?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что такое GGUF формат?",
+        "metrics": {
+          "cosine_similarity_char": 0.0531,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2069
+      },
+      {
+        "test_id": "chat_006",
+        "question": "Привет! Как дела?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Привет! Как дела?",
+        "metrics": {
+          "cosine_similarity_char": 0.0561,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2076
+      },
+      {
+        "test_id": "chat_007",
+        "question": "Что ты умеешь?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Что ты умеешь?",
+        "metrics": {
+          "cosine_similarity_char": 0.0583,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6025,
+          "rouge_l": 0.25,
+          "exact_match": 0.0,
+          "token_precision": 0.2727,
+          "token_recall": 0.2308,
+          "token_f1": 0.25
+        },
+        "passed": false,
+        "overall_score": 0.2049
+      },
+      {
+        "test_id": "chat_008",
+        "question": "Расскажи о себе",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Расскажи о себе",
+        "metrics": {
+          "cosine_similarity_char": 0.0575,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.5483,
+          "rouge_l": 0.2609,
+          "exact_match": 0.0,
+          "token_precision": 0.3,
+          "token_recall": 0.2308,
+          "token_f1": 0.2609
+        },
+        "passed": false,
+        "overall_score": 0.201
+      },
+      {
+        "test_id": "code_009",
+        "question": "Напиши функцию для нормализации массива",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Напиши функцию для нормализации массива",
+        "metrics": {
+          "cosine_similarity_char": 0.0455,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.205
+      },
+      {
+        "test_id": "code_010",
+        "question": "Как посчитать cosine similarity в Python?",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Как посчитать cosine similarity в Python?",
+        "metrics": {
+          "cosine_similarity_char": 0.0448,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6804,
+          "rouge_l": 0.2222,
+          "exact_match": 0.0,
+          "token_precision": 0.2143,
+          "token_recall": 0.2308,
+          "token_f1": 0.2222
+        },
+        "passed": false,
+        "overall_score": 0.2021
+      },
+      {
+        "test_id": "creative_011",
+        "question": "Опиши как работает обучение нейросети",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Опиши как работает обучение нейросети",
+        "metrics": {
+          "cosine_similarity_char": 0.0462,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6506,
+          "rouge_l": 0.24,
+          "exact_match": 0.0,
+          "token_precision": 0.25,
+          "token_recall": 0.2308,
+          "token_f1": 0.24
+        },
+        "passed": false,
+        "overall_score": 0.2051
+      },
+      {
+        "test_id": "creative_012",
+        "question": "Объясни разницу между CNN и RNN",
+        "teacher_answer": "[Error] Teacher inference failed: Subclasses must implement generate()",
+        "student_answer": "[Student Mock] Answer for: Объясни разницу между CNN и RNN",
+        "metrics": {
+          "cosine_similarity_char": 0.0486,
+          "cosine_similarity_word": 0.0,
+          "bleu_score": 0.6931,
+          "rouge_l": 0.2308,
+          "exact_match": 0.0,
+          "token_precision": 0.2308,
+          "token_recall": 0.2308,
+          "token_f1": 0.2308
+        },
+        "passed": false,
+        "overall_score": 0.2084
+      }
+    ]
+  }
+}

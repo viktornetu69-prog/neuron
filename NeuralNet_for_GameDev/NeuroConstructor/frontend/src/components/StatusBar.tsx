@@ -11,7 +11,7 @@ export function StatusBar({ status, isServerAvailable }: StatusBarProps) {
       borderTop: '1px solid #1e1e30',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      justifyContent: 'flex-start',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
@@ -21,9 +21,6 @@ export function StatusBar({ status, isServerAvailable }: StatusBarProps) {
           background: isServerAvailable ? '#4caf50' : '#f44336',
         }} />
         <span style={{ fontSize: 11, color: '#8888aa' }}>{status}</span>
-      </div>
-      <div style={{ fontSize: 11, color: '#555577' }}>
-        NeuroConstructor v1.0.0
       </div>
     </div>
   );

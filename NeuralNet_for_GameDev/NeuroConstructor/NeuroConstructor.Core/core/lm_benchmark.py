@@ -293,17 +293,20 @@ class BenchmarkRunner:
 
             # Create Student engine
             if config.student_model_path and os.path.exists(config.student_model_path):
-                try:
-                    student_engine = LLMEngine.from_gguf(
-                        model_path=config.student_model_path,
-                        config=InferenceConfig(
-                            max_tokens=config.inference_params.get("max_tokens", 512),
-                            temperature=config.inference_params.get("temperature", 0.7),
-                            top_p=config.inference_params.get("top_p", 0.9),
-                        ),
-                    )
-                except Exception as e:
-                    print(f"Warning: Failed to load Student model: {str(e)}")
+                if not config.student_model_path.endswith('.gguf'):
+                    print(f"Warning: Student model must be .gguf: {config.student_model_path}")
+                else:
+                    try:
+                        student_engine = LLMEngine.from_gguf(
+                            model_path=config.student_model_path,
+                            config=InferenceConfig(
+                                max_tokens=config.inference_params.get("max_tokens", 512),
+                                temperature=config.inference_params.get("temperature", 0.7),
+                                top_p=config.inference_params.get("top_p", 0.9),
+                            ),
+                        )
+                    except Exception as e:
+                        print(f"Warning: Failed to load Student model: {str(e)}")
 
         self.teacher_engine = self.teacher_engine or teacher_engine
         self.student_engine = self.student_engine or student_engine

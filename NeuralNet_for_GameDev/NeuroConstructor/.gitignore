@@ -1,1 +1,26 @@
-"models/student/" 
+# Models - large binary files, too big for git
+NeuroConstructor.Core/models/
+bin/*.gguf
+*.gguf
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+release/
+
+# Node
+node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo 

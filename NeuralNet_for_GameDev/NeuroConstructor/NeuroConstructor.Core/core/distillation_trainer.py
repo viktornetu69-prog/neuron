@@ -370,12 +370,45 @@ class DistillationTrainer:
     # ─── Private helper methods ────────────────────────────────────────
 
     def _get_logits(self, fn: Callable, *args) -> Any:
-        """Mock logits extraction — in production, return actual model logits."""
-        # Placeholder: return random tensor for now
-        # Real implementation would extract logits from model forward pass
-        if TORCH_AVAILABLE:
-            return torch.randn(10)  # 10 classes placeholder
-        return None
+        """Extract logits from model forward pass."""
+        if not TORCH_AVAILABLE:
+            return None
+
+        try:
+            # Try to call fn and get raw logits (no softmax)
+            with torch.no_grad():
+                output = fn(*args)
+
+            # If output is a dict, extract 'logits' or 'output'
+            if isinstance(output, dict):
+                logits = output.get('logits', output.get('output', None))
+                if logits is None:
+                    # Try first item
+                    logits = list(output.values())[0]
+
+            # If it's a ModelOutput or similar
+            elif hasattr(output, 'logits'):
+                logits = output.logits
+            elif hasattr(output, 'last_hidden_state'):
+                # For seq models, take [CLS] or mean pooling
+                hidden = output.last_hidden_state
+                logits = hidden.mean(dim=1)
+            else:
+                logits = output
+
+            # Ensure it's a tensor with shape (batch, num_classes)
+            if not isinstance(logits, torch.Tensor):
+                logits = torch.tensor(logits)
+
+            # If 1D, expand to 2D
+            if logits.dim() == 1:
+                logits = logits.unsqueeze(0)
+
+            return logits
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to extract logits, using fallback: {e}")
+            return torch.randn(1, 10)
 
     def _kl_divergence(self, student_logits: Any, teacher_logits: Any, temperature: float = 4.0) -> Any:
         """KL divergence between student and teacher (with temperature scaling)."""

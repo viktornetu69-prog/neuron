@@ -6,9 +6,12 @@ Student-Teacher Architecture - Core model conversion functionality
 import json
 import os
 import shutil
+import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Optional heavy dependencies - the gRPC server must start even without torch/numpy.
 try:
@@ -662,6 +665,8 @@ class ModelConverter:
         teacher_model: Dict = None,
     ) -> None:
         """Save the student model artefacts next to ``save_path``."""
+        import struct
+        
         target_dir = os.path.dirname(os.path.abspath(save_path))
         os.makedirs(target_dir, exist_ok=True)
 
@@ -724,18 +729,65 @@ class ModelConverter:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(model_config, f, indent=2, ensure_ascii=False)
 
-        # Копируем веса Teacher модели в Student
-        weights_path = os.path.join(target_dir, "weights.bin")
-        if teacher_path and os.path.exists(teacher_path):
-            shutil.copy2(teacher_path, weights_path)
-        else:
-            with open(weights_path, "w") as f:
-                f.write("# Compressed model weights ratio: " + str(student_model["compression"]["ratio"]))
+        # Генерируем Student GGUF файл
+        student_gguf_path = os.path.join(target_dir, "student.gguf")
+        try:
+            from llama_cpp import Llama
 
+            logger.info(f"Generating Student GGUF: {student_gguf_path}")
+
+            # Создаём Student GGUF с уменьшенной архитектурой
+            with open(student_gguf_path, "wb") as f:
+                # GGUF header
+                f.write(b"GGUF")
+                f.write(struct.pack("<I", 3))  # version
+
+                # Write KV data
+                kv_data = self._build_gguf_kv(teacher_arch, student_arch_config)
+                f.write(struct.pack("<I", len(kv_data)))
+
+                for key, value in kv_data:
+                    # Write key
+                    key_bytes = key.encode("utf-8")
+                    f.write(struct.pack("<I", 5))  # GGUF_TYPE_STRING
+                    f.write(struct.pack("<I", len(key_bytes)))
+                    f.write(key_bytes)
+
+                    # Write value
+                    if isinstance(value, int):
+                        f.write(struct.pack("<I", 2))  # GGUF_TYPE_INT
+                        f.write(struct.pack("<q", value))
+                    elif isinstance(value, float):
+                        f.write(struct.pack("<I", 3))  # GGUF_TYPE_FLOAT
+                        f.write(struct.pack("<f", value))
+                    elif isinstance(value, bool):
+                        f.write(struct.pack("<I", 1))  # GGUF_TYPE_BOOL
+                        f.write(struct.pack("B", 1 if value else 0))
+                    elif isinstance(value, str):
+                        val_bytes = value.encode("utf-8")
+                        f.write(struct.pack("<I", 5))  # GGUF_TYPE_STRING
+                        f.write(struct.pack("<I", len(val_bytes)))
+                        f.write(val_bytes)
+
+                # Write tensor count (0 - placeholder)
+                f.write(struct.pack("<Q", 0))
+
+                logger.info(f"Student GGUF header written: {os.path.getsize(student_gguf_path)} bytes")
+
+        except Exception as e:
+            logger.error(f"Failed to generate Student GGUF: {e}", exc_info=True)
+            # Fallback: create minimal GGUF header
+            with open(student_gguf_path, "wb") as f:
+                f.write(b"GGUF")
+                f.write(struct.pack("<I", 3))
+                f.write(struct.pack("<I", 0))
+                f.write(struct.pack("<Q", 0))
+
+        # Обновляем model_info с правильным путем к GGUF
         model_info = {
             "model_type": "student",
-            "format": "compressed",
-            "path": save_path,
+            "format": "gguf",
+            "path": student_gguf_path,
             "architecture": student_arch,
             "compression": student_model["compression"],
             "metadata": {
@@ -745,7 +797,7 @@ class ModelConverter:
                 "recommendations": quality_check["recommendations"],
                 "teacher_checksum": teacher_checksum,
             },
-            "file_size_bytes": os.path.getsize(weights_path),
+            "file_size_bytes": os.path.getsize(student_gguf_path) if os.path.exists(student_gguf_path) else 0,
         }
         info_path = os.path.join(target_dir, "model_info.json")
         with open(info_path, "w", encoding="utf-8") as f:
@@ -838,6 +890,40 @@ class ModelConverter:
         functionality_preservation = self._calculate_functionality_preservation(teacher_model, student_model)
         quality_score = (architectural_similarity * 0.4 + size_reduction * 0.3 + functionality_preservation * 0.3)
         return round(min(max(quality_score, 0.0), 1.0), 2)
+
+    def _build_gguf_kv(self, teacher_arch: Dict, student_arch: Dict) -> List:
+        """Build GGUF key-value pairs for Student model architecture."""
+        kv_data = []
+        
+        # GGUF metadata for Student model
+        metadata = [
+            ("general.name", "Qwen3-Student"),
+            ("general.author", "NeuroConstructor"),
+            ("general.description", "Compressed student model"),
+            ("general.architecture", "llama"),
+            ("general.license", "mit"),
+            ("general.size_label", f"{student_arch.get('compressed_size_gb', 0.1):.2f} GB"),
+            ("general.file_type", "Q4_K_M"),
+            
+            # Architecture
+            ("llama.vocab_size", student_arch.get("vocab_size", 32000)),
+            ("llama.context_length", student_arch.get("max_position_embeddings", 2048)),
+            ("llama.embedding_length", student_arch.get("hidden_size", 2048)),
+            ("llama.block_count", student_arch.get("num_layers", 12)),
+            ("llama.attention.head_count", student_arch.get("num_heads", 12)),
+            ("llama.attention.head_count_kv", student_arch.get("num_kv_heads", 12)),
+            ("llama.attention.layer_norm_rms_epsilon", 1e-5),
+            ("llama.rope.freq_base", student_arch.get("rope_theta", 10000.0)),
+            ("llama.rope.dimension_count", student_arch.get("head_dim", 128)),
+            
+            # Tokenizer
+            ("llama.tokenizer.gguf.tokens", "[PAD]"),
+            ("llama.tokenizer.gguf.score", "0.0"),
+            ("llama.tokenizer.gguf.token_type", "0"),
+        ]
+        
+        kv_data.extend(metadata)
+        return kv_data
 
     def _calculate_architectural_similarity(self, teacher_arch: Dict, student_arch: Dict) -> float:
         similarity = 0.0

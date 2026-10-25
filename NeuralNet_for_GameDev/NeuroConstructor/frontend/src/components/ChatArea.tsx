@@ -1,18 +1,23 @@
 import { KeyboardEvent, useState, useCallback, useRef } from 'react';
 import { Toast, ContextMenu } from './Toast';
+import { ChatMode, ChatMessage } from '@/types';
 
 interface ChatAreaProps {
-  messages: Array<{
-    role: string;
-    content: string;
-    timestamp: string;
-  }>;
+  messages: ChatMessage[];
   inputText: string;
   onInputTextChange: (text: string) => void;
   onSendMessage: (text: string) => void;
   onClearChat: () => void;
   isLoading: boolean;
   isServerAvailable: boolean;
+  chatMode: ChatMode;
+  onExportHistory?: () => void;
+  isStreaming?: boolean; // Показывать процесс "мышления"
+}
+
+interface ThinkingState {
+  isThinking: boolean;
+  currentText: string;
 }
 
 export function ChatArea({
@@ -23,6 +28,9 @@ export function ChatArea({
   onClearChat,
   isLoading,
   isServerAvailable,
+  chatMode,
+  onExportHistory,
+  isStreaming = true,
 }: ChatAreaProps) {
   const [toast, setToast] = useState({ visible: false, message: '', position: { x: 0, y: 0 } });
   const [contextMenu, setContextMenu] = useState({ visible: false, position: { x: 0, y: 0 } });
@@ -58,7 +66,6 @@ export function ChatArea({
     handleCopy();
   }, [showToast]);
 
-  // Скрыть контекстное меню при клике вне
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (messageRef.current && !messageRef.current.contains(e.target as Node)) {
       setContextMenu({ visible: false, position: { x: 0, y: 0 } });
@@ -69,6 +76,66 @@ export function ChatArea({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSendMessage(inputText);
+    }
+  };
+
+  // Определяем placeholder в зависимости от режима
+  const getPlaceholder = () => {
+    switch (chatMode) {
+      case 'human-teacher':
+        return 'Спросите учителя...';
+      case 'human-student':
+        return 'Спросите студента...';
+      case 'human-teacher-student':
+        return 'Задайте вопрос для сравнения ответов...';
+      case 'teacher-student':
+        return 'Введите тему для обсуждения учителя и студента...';
+      default:
+        return 'Введите сообщение...';
+    }
+  };
+
+  // Определяем заголовок режима
+  const getModeTitle = () => {
+    switch (chatMode) {
+      case 'human-teacher':
+        return '💬 Человек ↔ Учитель';
+      case 'human-student':
+        return '🎓 Человек ↔ Студент';
+      case 'human-teacher-student':
+        return '🤝 Человек ↔ Учитель + Студент';
+      case 'teacher-student':
+        return '⚔️ Учитель ↔ Студент';
+      default:
+        return '💬 Чат';
+    }
+  };
+
+  // Определяем иконку роли
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case 'human':
+        return '👤';
+      case 'teacher':
+        return '👨‍🏫';
+      case 'student':
+        return '🎓';
+      default:
+        return '💬';
+    }
+  };
+
+  // Определяем цвет роли
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'human':
+        return '#8888aa';
+      case 'teacher':
+        return '#4caf50';
+      case 'student':
+        return '#7c6ff7';
+      default:
+        return '#8888aa';
     }
   };
 
@@ -96,26 +163,44 @@ export function ChatArea({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: '#e8e8e8' }}>
-              💬 Чат
+              {getModeTitle()}
             </h2>
             <p style={{ fontSize: 12, color: '#8888aa', margin: 0 }}>
               {messages.length} сообщений
             </p>
           </div>
-          <button
-            onClick={onClearChat}
-            style={{
-              padding: '6px 12px',
-              background: 'transparent',
-              border: '1px solid #1e1e30',
-              borderRadius: 6,
-              color: '#8888aa',
-              cursor: 'pointer',
-              fontSize: 12,
-            }}
-          >
-            Очистить
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {chatMode === 'teacher-student' && onExportHistory && (
+              <button
+                onClick={onExportHistory}
+                style={{
+                  padding: '6px 12px',
+                  background: 'transparent',
+                  border: '1px solid #1e1e30',
+                  borderRadius: 6,
+                  color: '#8888aa',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                📥 Экспорт
+              </button>
+            )}
+            <button
+              onClick={onClearChat}
+              style={{
+                padding: '6px 12px',
+                background: 'transparent',
+                border: '1px solid #1e1e30',
+                borderRadius: 6,
+                color: '#8888aa',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Очистить
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -133,7 +218,11 @@ export function ChatArea({
               height: '100%',
               color: '#8888aa',
             }}>
-              <p style={{ fontSize: 14, marginBottom: 16 }}>Отправьте сообщение чтобы начать...</p>
+              <p style={{ fontSize: 14, marginBottom: 16 }}>
+                {chatMode === 'teacher-student'
+                  ? 'Модели начнут диалог после вашей темы'
+                  : 'Отправьте сообщение чтобы начать...'}
+              </p>
               {!isServerAvailable && (
                 <p style={{ fontSize: 12, color: '#f44336' }}>
                   ⚠️ Сервер недоступен
@@ -147,6 +236,8 @@ export function ChatArea({
                   key={index}
                   message={msg}
                   onContextMenu={handleContextMenu}
+                  roleIcon={getRoleIcon(msg.role)}
+                  roleColor={getRoleColor(msg.role)}
                 />
               ))}
               {isLoading && (
@@ -189,7 +280,7 @@ export function ChatArea({
               value={inputText}
               onChange={e => onInputTextChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Введите сообщение..."
+              placeholder={getPlaceholder()}
               disabled={isLoading}
               style={{
                 flex: 1,
@@ -251,32 +342,65 @@ export function ChatArea({
 function MessageBubble({
   message,
   onContextMenu,
+  roleIcon,
+  roleColor,
 }: {
-  message: { role: string; content: string; timestamp: string };
+  message: ChatMessage;
   onContextMenu: (e: React.MouseEvent, text: string) => void;
+  roleIcon: string;
+  roleColor: string;
 }) {
-  const isUser = message.role === 'user';
+  const isHuman = message.role === 'human';
 
   return (
     <div
       style={{
         display: 'flex',
-        justifyContent: isUser ? 'flex-end' : 'flex-start',
+        justifyContent: isHuman ? 'flex-end' : 'flex-start',
       }}
     >
       <div
         style={{
           maxWidth: '75%',
           padding: '12px 16px',
-          background: isUser ? '#7c6ff7' : '#121220',
-          borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-          color: isUser ? 'white' : '#e8e8e8',
+          background: isHuman ? '#7c6ff7' : '#121220',
+          borderRadius: isHuman ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+          color: isHuman ? 'white' : '#e8e8e8',
           userSelect: 'text',
           WebkitUserSelect: 'text',
           cursor: 'text',
         }}
         onContextMenu={e => onContextMenu(e, message.content)}
       >
+        {/* Role header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          marginBottom: '6px',
+          fontSize: '11px',
+          color: isHuman ? 'rgba(255,255,255,0.7)' : roleColor,
+          fontWeight: 600,
+        }}>
+          <span>{roleIcon}</span>
+          <span>{message.role.toUpperCase()}</span>
+          {/* Индикатор "думаю..." */}
+          {!isHuman && message.content === '' && (
+            <span style={{ marginLeft: '8px', color: '#8888aa', fontWeight: 400 }}>
+              <span style={{
+                display: 'inline-block',
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: '#7c6ff7',
+                animation: 'pulse 1.5s infinite',
+              }}></span>
+              {' '}думаю...
+            </span>
+          )}
+        </div>
+
+        {/* Content */}
         <p style={{
           fontSize: 14,
           lineHeight: 1.5,
@@ -284,11 +408,11 @@ function MessageBubble({
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
         }}>
-          {message.content}
+          {message.content || ''}
         </p>
         <p style={{
           fontSize: 11,
-          color: isUser ? 'rgba(255,255,255,0.6)' : '#8888aa',
+          color: isHuman ? 'rgba(255,255,255,0.6)' : '#8888aa',
           margin: '6px 0 0 0',
           userSelect: 'text',
           WebkitUserSelect: 'text',

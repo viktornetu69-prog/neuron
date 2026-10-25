@@ -5,7 +5,7 @@ const API_BASE = 'http://127.0.0.1:8000';
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 300000, // 5 минут для LLM операций (генерация токенов может быть долгой)
 });
 
 // Health check
@@ -24,10 +24,11 @@ export async function sendChat(message: string, history: Message[] = []) {
 }
 
 // Models API
-export async function getModels() {
-  const response = await api.get('/api/models');
-  return response.data as ModelInfo;
-}
+// Note: /api/models endpoint не существует — используйте /api/models/teacher и /api/models/student
+// export async function getModels() {
+//   const response = await api.get('/api/models');
+//   return response.data as ModelInfo;
+// }
 
 export async function listTeacherFiles() {
   const response = await api.get('/api/models/teacher');
@@ -101,5 +102,55 @@ export async function analyzeTeacherModel(filename: string) {
 export async function analyzeStudentModel(filename: string) {
   const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
   const response = await api.get(`/api/models/student/${encodeURIComponent(cleanFilename)}`);
+  return response.data;
+}
+
+// ============================================================================
+// Chat modes
+// ============================================================================
+
+export async function sendChatToMode(
+  mode: string,
+  message: string,
+  history: Array<{ role: string; content: string; timestamp: string }> = []
+) {
+  const response = await api.post('/api/chat/mode', {
+    mode,
+    message,
+    history,
+  });
+  return response.data;
+}
+
+export async function exportChatHistory(mode: string, messages: Array<{ role: string; content: string; timestamp: string }>) {
+  const response = await api.post('/api/chat/export', {
+    mode,
+    messages,
+  });
+  return response.data;
+}
+
+// ============================================================================
+// Plugin Manager
+// ============================================================================
+
+export async function listPlugins() {
+  const response = await api.get('/api/plugins');
+  return response.data;
+}
+
+export async function createPlugin(plugin: {
+  name: string;
+  description: string;
+  type: string;
+  version: string;
+  capabilities: string[];
+}) {
+  const response = await api.post('/api/plugins', plugin);
+  return response.data;
+}
+
+export async function deletePlugin(pluginName: string) {
+  const response = await api.delete(`/api/plugins/${encodeURIComponent(pluginName)}`);
   return response.data;
 }

@@ -696,7 +696,7 @@ export function ModelsPanel({
                   {/* Основная информация */}
                   <div style={{ ...gridStyle, marginBottom: 16 }}>
                     <div style={cardStyle}>
-                      <div style={labelStyle}>Файл weights.bin</div>
+                      <div style={labelStyle}>Файл Student GGUF</div>
                       <div style={valueStyle}>{formatSize(selectedFile.size)}</div>
                     </div>
                     <div style={cardStyle}>

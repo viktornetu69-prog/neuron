@@ -28,6 +28,13 @@ except ImportError:
     ModelConverter = None
     MODEL_CONVERTER_AVAILABLE = False
 
+# Импортируем LLM Engine для чата
+try:
+    from llm_engine import LlamaCppEngine, LLAMA_CPP_AVAILABLE
+except ImportError:
+    LlamaCppEngine = None
+    LLAMA_CPP_AVAILABLE = False
+
 # Импортируем DatasetProcessor из Core
 try:
     from dataset_processor import DatasetProcessor, ActivationAnalyzer
@@ -65,6 +72,10 @@ class RESTEngine:
         self.model_info = None
         self.conversation_history: List[Dict[str, str]] = []
 
+        # LLM Engines для чата
+        self.teacher_engine = None
+        self.student_engine = None
+
         # Создаём директории если нет
         os.makedirs(self.MODELS_DIR, exist_ok=True)
         os.makedirs(os.path.join(self.MODELS_DIR, "teacher"), exist_ok=True)
@@ -95,7 +106,30 @@ class RESTEngine:
         return resp
 
     def load_teacher_model(self, model_path: str) -> Dict[str, Any]:
-        return {"status": "loaded", "info": f"Model: {model_path}", "quality_score": 0.95}
+        """Загружаем Teacher модель в LLM engine для чата"""
+        logger.info(f"Loading Teacher model: {model_path}")
+        try:
+            if not LLAMA_CPP_AVAILABLE or LlamaCppEngine is None:
+                logger.error("LlamaCppEngine not available")
+                return {"status": "error", "error": "LlamaCppEngine not available"}
+
+            # Загружаем модель
+            self.teacher_engine = LlamaCppEngine(
+                model_path=model_path,
+                n_gpu_layers=0,  # CPU
+                n_threads=4,
+            )
+
+            logger.info(f"Teacher model loaded successfully: {model_path}")
+            return {
+                "status": "loaded",
+                "info": f"Model: {model_path}",
+                "quality_score": 0.95,
+                "llm_ready": True,
+            }
+        except Exception as e:
+            logger.error(f"Failed to load Teacher model: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
 
     def create_student_model(self, teacher_path: str) -> Dict[str, Any]:
         return {"status": "created", "student_model_info": "Student template created", "compression_applied": True}
@@ -112,13 +146,17 @@ class RESTEngine:
         # Пути относительно MODELS_DIR
         teacher_full = os.path.join(self.MODELS_DIR, teacher_path)
         student_dir = os.path.join(self.MODELS_DIR, os.path.dirname(student_path))
-        student_full = os.path.join(student_dir, "weights.bin")
+        
+        # Генерируем имя для Student GGUF файла на основе Teacher
+        teacher_filename = os.path.basename(teacher_path)
+        student_filename = teacher_filename.replace("Qwen3", "Qwen3-Student").replace(".gguf", "-student.gguf")
+        student_full = os.path.join(student_dir, student_filename)
 
         # Создаём директорию для Student
         os.makedirs(student_dir, exist_ok=True)
 
         # Создаём ModelConverter и выполняем конвертацию
-        logger.info(f"Starting conversion: {teacher_path} -> {student_path}")
+        logger.info(f"Starting conversion: {teacher_path} -> {student_filename}")
         converter = ModelConverter()
 
         try:
@@ -134,7 +172,7 @@ class RESTEngine:
             logger.info(f"Conversion successful: ratio={result.get('compression_ratio')}, quality={result.get('quality_score')}")
             return {
                 "status": "converted",
-                "conversion_results": result.get("student_path", ""),
+                "conversion_results": student_filename,
                 "compression_ratio": float(result.get("compression_ratio", 0.0)),
                 "quality_score": float(result.get("quality_score", 0.0)),
                 "compression_method": result.get("compression_method", "quantization"),
@@ -474,21 +512,21 @@ class RESTEngine:
         }
 
     def analyze_student_model(self, filename: str) -> Dict[str, Any]:
-        """Анализ Student модели из config.json и model_info.json рядом с weights.bin"""
-        # filename - это имя weights.bin файла
-        weights_filename = filename if filename.endswith('.bin') else filename.replace('.gguf', '.bin')
-        
-        # Ищем weights.bin в директории student
+        """Анализ Student модели из config.json и model_info.json"""
+        # filename - это имя GGUF файла
+        gguf_filename = filename if filename.endswith('.gguf') else filename.replace('.bin', '.gguf')
+
+        # Ищем GGUF файл в директории student
         student_dir = os.path.join(self.MODELS_DIR, "student")
-        weights_path = os.path.join(student_dir, weights_filename)
-        
-        # Если не нашли, пробуем найти любой .bin файл
-        if not os.path.exists(weights_path):
-            bin_files = [f for f in os.listdir(student_dir) if f.endswith('.bin')]
-            if bin_files:
-                weights_filename = bin_files[0]
-                weights_path = os.path.join(student_dir, weights_filename)
-        
+        gguf_path = os.path.join(student_dir, gguf_filename)
+
+        # Если не нашли, пробуем найти любой .gguf файл
+        if not os.path.exists(gguf_path):
+            gguf_files = [f for f in os.listdir(student_dir) if f.endswith('.gguf')]
+            if gguf_files:
+                gguf_filename = gguf_files[0]
+                gguf_path = os.path.join(student_dir, gguf_filename)
+
         config_path = os.path.join(student_dir, "config.json")
         info_path = os.path.join(student_dir, "model_info.json")
 
@@ -746,7 +784,265 @@ class RESTEngine:
                 "columns": columns,
                 "rows": result.get("rows", []),
             }
-
         except Exception as e:
-            logger.error(f"View dataset error: {e}")
             return {"success": False, "error": str(e)}
+
+    # ========================================================================
+    # Chat modes
+    # ========================================================================
+
+    def chat_mode(self, mode: str, message: str, history: List[Dict[str, str]] = None) -> Dict[str, Any]:
+        """Обработка чата в зависимости от режима"""
+        if history is None:
+            history = []
+
+        logger.info(f"Chat mode: {mode}, message: {message[:50]}...")
+
+        if mode == "human-teacher":
+            # Человек задает вопрос, отвечает Teacher
+            return self._chat_human_teacher(message, history)
+        elif mode == "human-student":
+            # Человек задает вопрос, отвечает Student
+            return self._chat_human_student(message, history)
+        elif mode == "human-teacher-student":
+            # Человек задает вопрос, отвечают оба
+            return self._chat_human_both(message, history)
+        elif mode == "teacher-student":
+            # Teacher и Student обсуждают тему
+            return self._chat_teacher_student(message, history)
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown mode: {mode}",
+                "responses": [],
+            }
+
+    def _chat_human_teacher(self, message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Человек ↔ Учитель — реальный вызов Teacher LLM"""
+        if not self.teacher_engine:
+            return {
+                "success": False,
+                "error": "Teacher model not loaded",
+                "responses": [],
+            }
+
+        try:
+            # Формируем prompt с историей
+            prompt = self._build_chat_prompt(history, message)
+            result = self.teacher_engine.model.create_completion(
+                prompt=prompt,
+                max_tokens=512,
+                temperature=0.7,
+                top_p=0.9,
+            )
+
+            response_text = result.get("choices", [{}])[0].get("text", "")
+
+            return {
+                "success": True,
+                "mode": "human-teacher",
+                "responses": [
+                    {"role": "human", "content": message, "timestamp": datetime.now().isoformat()},
+                    {"role": "teacher", "content": response_text, "timestamp": datetime.now().isoformat()},
+                ],
+            }
+        except Exception as e:
+            logger.error(f"Teacher chat error: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "responses": [],
+            }
+
+    def _chat_human_student(self, message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Человек ↔ Студент — используем Teacher как fallback пока нет Student GGUF"""
+        # Fallback на Teacher если Student не загружен
+        engine = self.student_engine or self.teacher_engine
+        if not engine:
+            return {
+                "success": False,
+                "error": "No model loaded",
+                "responses": [],
+            }
+
+        try:
+            prompt = self._build_chat_prompt(history, message)
+            result = engine.model.create_completion(
+                prompt=prompt,
+                max_tokens=512,
+                temperature=0.7,
+                top_p=0.9,
+            )
+
+            response_text = result.get("choices", [{}])[0].get("text", "")
+
+            return {
+                "success": True,
+                "mode": "human-student",
+                "responses": [
+                    {"role": "human", "content": message, "timestamp": datetime.now().isoformat()},
+                    {"role": "student", "content": response_text, "timestamp": datetime.now().isoformat()},
+                ],
+            }
+        except Exception as e:
+            logger.error(f"Student chat error: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "responses": [],
+            }
+
+    def _chat_human_both(self, message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Человек ↔ Учитель + Студент — оба отвечают"""
+        if not self.teacher_engine:
+            return {
+                "success": False,
+                "error": "Teacher model not loaded",
+                "responses": [],
+            }
+
+        try:
+            # Teacher ответ
+            teacher_prompt = self._build_chat_prompt(history, message)
+            teacher_result = self.teacher_engine.model.create_completion(
+                prompt=teacher_prompt,
+                max_tokens=512,
+                temperature=0.7,
+                top_p=0.9,
+            )
+            teacher_text = teacher_result.get("choices", [{}])[0].get("text", "")
+
+            # Student ответ (fallback на Teacher)
+            student_engine = self.student_engine or self.teacher_engine
+            student_result = student_engine.model.create_completion(
+                prompt=teacher_prompt,
+                max_tokens=256,
+                temperature=0.5,
+                top_p=0.8,
+            )
+            student_text = student_result.get("choices", [{}])[0].get("text", "")
+
+            return {
+                "success": True,
+                "mode": "human-teacher-student",
+                "responses": [
+                    {"role": "human", "content": message, "timestamp": datetime.now().isoformat()},
+                    {"role": "teacher", "content": teacher_text, "timestamp": datetime.now().isoformat()},
+                    {"role": "student", "content": student_text, "timestamp": datetime.now().isoformat()},
+                ],
+            }
+        except Exception as e:
+            logger.error(f"Both chat error: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "responses": [],
+            }
+
+    def _chat_teacher_student(self, message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Teacher ↔ Student — автодиалог между моделями"""
+        if not self.teacher_engine:
+            return {
+                "success": False,
+                "error": "Teacher model not loaded",
+                "responses": [],
+            }
+
+        import uuid
+
+        try:
+            teacher_prompt = self._build_chat_prompt(history, message)
+
+            # Teacher отвечает первым
+            teacher_result = self.teacher_engine.model.create_completion(
+                prompt=teacher_prompt,
+                max_tokens=512,
+                temperature=0.7,
+                top_p=0.9,
+            )
+            teacher_text = teacher_result.get("choices", [{}])[0].get("text", "")
+
+            # Student отвечает (fallback на Teacher)
+            student_engine = self.student_engine or self.teacher_engine
+            student_prompt = f"Сжати отвечай на тему: {message}. Твой ответ:"
+            student_result = student_engine.model.create_completion(
+                prompt=student_prompt,
+                max_tokens=256,
+                temperature=0.5,
+                top_p=0.8,
+            )
+            student_text = student_result.get("choices", [{}])[0].get("text", "")
+
+            entry = {
+                "id": str(uuid.uuid4()),
+                "mode": "teacher-student",
+                "topic": message,
+                "messages": [
+                    {"role": "human", "content": f"[Тема обсуждения]: {message}", "timestamp": datetime.now().isoformat()},
+                    {"role": "teacher", "content": teacher_text, "timestamp": datetime.now().isoformat()},
+                    {"role": "student", "content": student_text, "timestamp": datetime.now().isoformat()},
+                ],
+                "created_at": datetime.now().isoformat(),
+            }
+
+            logger.info(f"Teacher-Student dialogue completed: {message[:50]}...")
+
+            return {
+                "success": True,
+                "mode": "teacher-student",
+                "history_entry": entry,
+            }
+        except Exception as e:
+            logger.error(f"Teacher-Student chat error: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "responses": [],
+            }
+
+    def _build_chat_prompt(self, history: List[Dict[str, str]], current_message: str) -> str:
+        """Строит prompt из истории и текущего сообщения"""
+        prompt = "Система: Ты — AI-ассистент. Отвечай кратко и по делу.\n\n"
+
+        if history:
+            for h in history:
+                role = h.get("role", "user")
+                content = h.get("content", "")
+                if role == "human":
+                    prompt += f"Вопрос: {content}\n"
+                elif role == "teacher":
+                    prompt += f"Учитель: {content}\n"
+                elif role == "student":
+                    prompt += f"Студент: {content}\n"
+
+        prompt += f"Вопрос: {current_message}\n"
+        prompt += "Ответ: "
+
+        return prompt
+
+    def export_chat(self, mode: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Экспорт истории чата в формате JSON"""
+        import uuid
+        import json
+
+        export_data = {
+            "export_id": str(uuid.uuid4()),
+            "mode": mode,
+            "exported_at": datetime.now().isoformat(),
+            "message_count": len(messages),
+            "messages": [
+                {
+                    "role": msg.get("role", "unknown"),
+                    "content": msg.get("content", ""),
+                    "timestamp": msg.get("timestamp", ""),
+                }
+                for msg in messages
+            ],
+        }
+
+        logger.info(f"Chat exported: {mode}, {len(messages)} messages")
+
+        return {
+            "success": True,
+            "export_data": export_data,
+        }

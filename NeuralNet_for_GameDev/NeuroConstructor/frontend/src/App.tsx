@@ -1,21 +1,25 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppLayout } from './components/AppLayout';
 import { ChatArea } from './components/ChatArea';
+import { ChatModeSelector } from './components/ChatModeSelector';
 import { ModelsPanel } from './components/ModelsPanel';
 import { DatasetPanel } from './components/DatasetPanel';
 import { BenchmarkPanel } from './components/BenchmarkPanel';
 import { StatusBar } from './components/StatusBar';
 import { PluginManagerPanel } from './components/PluginManager';
+import { SettingsPanel } from './components/SettingsPanel';
 import { PreviewPanel } from './components/PreviewPanel';
-import { checkHealth, sendChat } from '@/api.client';
+import { checkHealth } from '@/api.client';
+import { sendChatToMode, exportChatHistory } from '@/api.client';
 import { Plugin } from '@/types';
 import { DatasetAnalysisResult } from '@/types/dataset-panel.types';
+import { ChatMode, ChatMessage } from '@/types';
 
 type Panel = 'chat' | 'models' | 'datasets' | 'benchmark' | 'stage6' | 'plugins' | 'settings';
 
 interface AppState {
   panel: Panel;
-  messages: Array<{ role: string; content: string; timestamp: string }>;
+  messages: ChatMessage[];
   inputText: string;
   serverStatus: string;
   isServerAvailable: boolean;
@@ -25,6 +29,9 @@ interface AppState {
   isPreviewServerRunning: boolean;
   teacherAnalysis: any | null;
   datasetAnalysis: DatasetAnalysisResult | null;
+  chatMode: ChatMode;
+  isTeacherLoaded: boolean;
+  isStudentAvailable: boolean;
 }
 
 export default function App() {
@@ -41,6 +48,9 @@ export default function App() {
     isPreviewServerRunning: false,
     teacherAnalysis: null,
     datasetAnalysis: null,
+    chatMode: 'human-teacher',
+    isTeacherLoaded: false,
+    isStudentAvailable: false,
   });
 
   useEffect(() => {
@@ -73,11 +83,19 @@ export default function App() {
     }
   }, []);
 
+  const handleChatModeChange = useCallback((mode: ChatMode) => {
+    setState((prev) => ({
+      ...prev,
+      chatMode: mode,
+      messages: [],
+    }));
+  }, []);
+
   const handleSendMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
 
-    const userMessage = {
-      role: 'user' as const,
+    const userMessage: ChatMessage = {
+      role: 'human',
       content: text,
       timestamp: new Date().toLocaleTimeString(),
     };
@@ -90,39 +108,116 @@ export default function App() {
     }));
 
     try {
-      const response = await sendChat(text, state.messages);
-      setState((prev) => ({
-        ...prev,
-        messages: [
-          ...prev.messages,
-          {
-            role: 'assistant' as const,
-            content: response.is_error ? `⚠️ ${response.message}` : response.message,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-        ],
-        loading: false,
+      const mode = state.chatMode;
+
+      // Формируем историю для отправки на бэкенд
+      const apiHistory: Array<{ role: string; content: string; timestamp: string }> = state.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
       }));
+
+      if (mode === 'human-teacher') {
+        // Обычный запрос без streaming
+        const response = await sendChatToMode(mode, text, apiHistory);
+
+        if (response.success && response.responses) {
+          setState((prev) => ({
+            ...prev,
+            messages: [...prev.messages, ...response.responses],
+            loading: false,
+          }));
+        } else {
+          throw new Error(response.error || 'Failed to get response');
+        }
+      } else if (mode === 'human-teacher-student') {
+        // Для human-teacher-student используем обычный endpoint
+        const response = await sendChatToMode(mode, text, apiHistory);
+
+        if (response.success && response.responses) {
+          setState((prev) => ({
+            ...prev,
+            messages: [...prev.messages, ...response.responses],
+            loading: false,
+          }));
+        } else {
+          throw new Error(response.error || 'Failed to get response');
+        }
+      } else if (mode === 'human-student') {
+        // Обычный запрос без streaming
+        const response = await sendChatToMode(mode, text, apiHistory);
+
+        if (response.success && response.responses) {
+          setState((prev) => ({
+            ...prev,
+            messages: [...prev.messages, ...response.responses],
+            loading: false,
+          }));
+        } else {
+          throw new Error(response.error || 'Failed to get response');
+        }
+      } else if (mode === 'teacher-student') {
+        // Для teacher-student используем обычный endpoint (не streaming)
+        const response = await sendChatToMode(mode, text, apiHistory);
+
+        if (response.success && response.history_entry) {
+          // Добавляем весь диалог как одно consolidated сообщение
+          const dialogueMessages = response.history_entry.messages.map((msg: ChatMessage) => ({
+            ...msg,
+            timestamp: msg.timestamp || new Date().toLocaleTimeString(),
+          }));
+          setState((prev) => ({
+            ...prev,
+            messages: [...prev.messages, ...dialogueMessages],
+            loading: false,
+          }));
+        } else {
+          throw new Error(response.error || 'Failed to get response');
+        }
+      }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Chat error:', error);
       setState((prev) => ({
         ...prev,
         messages: [
           ...prev.messages,
           {
-            role: 'assistant' as const,
-            content: `⚠️ Failed to connect to server: ${msg}`,
+            role: 'human',
+            content: `⚠️ ${msg}`,
             timestamp: new Date().toLocaleTimeString(),
           },
         ],
         loading: false,
       }));
     }
-  }, [state.messages]);
+  }, [state.chatMode, state.messages]);
 
   const handleClearChat = useCallback(() => {
     setState((prev) => ({ ...prev, messages: [] }));
   }, []);
+
+  const handleExportHistory = useCallback(async () => {
+    try {
+      const response = await exportChatHistory(state.chatMode, state.messages);
+
+      if (response.success && response.export_data) {
+        // Создаем JSON файл для скачивания
+        const jsonStr = JSON.stringify(response.export_data, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat-history-${state.chatMode}-${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  }, [state.chatMode, state.messages]);
 
   const togglePreview = useCallback(() => {
     setState((prev) => ({
@@ -142,8 +237,12 @@ export default function App() {
     setSidebarExpanded(prev => !prev);
   }, []);
 
+  const handleOpenSettings = useCallback(() => {
+    setState((prev) => ({ ...prev, panel: 'settings' as Panel }));
+  }, []);
+
   const handleTeacherAnalysisChange = useCallback((analysis: any | null) => {
-    setState(prev => ({ ...prev, teacherAnalysis: analysis }));
+    setState(prev => ({ ...prev, teacherAnalysis: analysis, isTeacherLoaded: !!analysis }));
   }, []);
 
   const handleDatasetAnalysisChange = useCallback((analysis: DatasetAnalysisResult | null) => {
@@ -159,6 +258,7 @@ export default function App() {
       activePanel={state.panel}
       onPanelChange={(panel) => setState((prev) => ({ ...prev, panel: panel as Panel }))}
       onCheckServer={checkServer}
+      onOpenSettings={handleOpenSettings}
     >
       <div style={{
         flex: 1,
@@ -173,15 +273,25 @@ export default function App() {
           borderRight: state.showPreview ? '1px solid #1a1a2e' : 'none',
         }}>
           {state.panel === 'chat' ? (
-            <ChatArea
-              messages={state.messages}
-              inputText={state.inputText}
-              onInputTextChange={(text) => setState((prev) => ({ ...prev, inputText: text }))}
-              onSendMessage={handleSendMessage}
-              onClearChat={handleClearChat}
-              isLoading={state.loading}
-              isServerAvailable={state.isServerAvailable}
-            />
+            <>
+              <ChatModeSelector
+                selectedMode={state.chatMode}
+                onChange={handleChatModeChange}
+                isTeacherLoaded={state.isTeacherLoaded}
+                isStudentAvailable={state.isStudentAvailable}
+              />
+              <ChatArea
+                messages={state.messages}
+                inputText={state.inputText}
+                onInputTextChange={(text) => setState((prev) => ({ ...prev, inputText: text }))}
+                onSendMessage={handleSendMessage}
+                onClearChat={handleClearChat}
+                isLoading={state.loading}
+                isServerAvailable={state.isServerAvailable}
+                chatMode={state.chatMode}
+                onExportHistory={handleExportHistory}
+              />
+            </>
           ) : state.panel === 'models' ? (
             <ModelsPanel
               isServerAvailable={state.isServerAvailable}
@@ -196,6 +306,12 @@ export default function App() {
             />
           ) : state.panel === 'benchmark' ? (
             <BenchmarkPanel
+              isServerAvailable={state.isServerAvailable}
+            />
+          ) : state.panel === 'settings' ? (
+            <SettingsPanel
+              isTeacherLoaded={state.isTeacherLoaded}
+              isStudentAvailable={state.isStudentAvailable}
               isServerAvailable={state.isServerAvailable}
             />
           ) : (

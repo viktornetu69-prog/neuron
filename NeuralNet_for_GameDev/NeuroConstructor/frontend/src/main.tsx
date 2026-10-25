@@ -3,6 +3,13 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 
+// Extend Window interface
+declare global {
+  interface Window {
+    debugger?: unknown;
+  }
+}
+
 // Prevent DevTools from auto-opening
 if (typeof window !== 'undefined') {
   // Remove any debugger statements that might have been left

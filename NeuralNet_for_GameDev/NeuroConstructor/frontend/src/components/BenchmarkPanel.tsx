@@ -69,8 +69,13 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
       const teacherData = await teacherRes.json();
       const studentData = await studentRes.json();
 
+      // Filter only GGUF files for student models (exclude placeholder files like weights.bin)
+      const ggufFiles = (studentData.files || []).filter((f: any) =>
+        f.filename.toLowerCase().endsWith('.gguf')
+      );
+
       setTeacherModels(teacherData.files || []);
-      setStudentModels(studentData.files || []);
+      setStudentModels(ggufFiles);
       setModelsLoaded(true);
     } catch (err: any) {
       console.error('Failed to load models:', err);
@@ -106,7 +111,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
       const data = await response.json();
 
       if (data.success) {
-        setLlmStatus(prev => ({
+        setLlmStatus((prev: any) => ({
           ...prev,
           model_loaded: true,
           model_path: data.model_path || prev?.model_path || '',

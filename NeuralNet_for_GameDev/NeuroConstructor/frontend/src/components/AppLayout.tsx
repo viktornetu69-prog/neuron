@@ -11,6 +11,7 @@ interface AppLayoutProps {
   activePanel: string;
   onPanelChange: (panel: string) => void;
   onCheckServer: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function AppLayout({
@@ -22,6 +23,7 @@ export function AppLayout({
   activePanel,
   onPanelChange,
   onCheckServer,
+  onOpenSettings,
 }: AppLayoutProps) {
   return (
     <div style={{
@@ -53,6 +55,7 @@ export function AppLayout({
           onPanelChange={onPanelChange}
           onCheckServer={onCheckServer}
           onToggle={onToggleSidebar}
+          onOpenSettings={onOpenSettings}
         />
 
         {/* Content */}
