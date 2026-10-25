@@ -110,7 +110,10 @@ export function ModelsPanel({
       setOutputPath
     );
 
-    if (!result.success) {
+    if (result.success) {
+      alert('✅ Student успешно создан!');
+    } else {
+      alert('❌ Ошибка создания Student: ' + (result.error || 'Неизвестная ошибка'));
       clearError();
     }
   };
@@ -124,7 +127,10 @@ export function ModelsPanel({
       setShowCreateStudentDialog
     );
 
-    if (!result.success) {
+    if (result.success) {
+      alert('✅ Student успешно создан!');
+    } else {
+      alert('❌ Ошибка создания Student: ' + (result.error || 'Неизвестная ошибка'));
       clearError();
     }
   };

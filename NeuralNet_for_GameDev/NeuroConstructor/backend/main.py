@@ -244,8 +244,12 @@ async def create_student_model(request: CreateStudentRequest):
 @app.post("/api/models/student/scratch", response_model=CreateStudentResponse)
 async def create_student_from_scratch(request: StudentArchitectureRequest):
     """Создать Student модель с нуля по параметрам архитектуры"""
+    logger.info(f"Creating student from scratch: {request.model_family}")
+    
     if not server_state["engine"]:
+        logger.error("Engine not initialized")
         raise HTTPException(status_code=503, detail="Engine not initialized")
+    
     try:
         # Генерируем JSON конфиг Student архитектуры
         import json
@@ -278,15 +282,17 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(student_config, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Student model created from scratch: {filepath}")
+        logger.info(f"Student model created successfully: {filepath}")
         
         return CreateStudentResponse(
             status="created",
             student_model_info=f"Student {request.model_family} created: {request.hidden_size}h x {request.num_layers}L x {request.num_heads}H",
             compression_applied=False,
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Create student from scratch error: {e}")
+        logger.error(f"Create student from scratch error: {e}", exc_info=True)
         return CreateStudentResponse(status="error", error_message=str(e))
 
 @app.post("/api/models/convert", response_model=ConvertResponse)
