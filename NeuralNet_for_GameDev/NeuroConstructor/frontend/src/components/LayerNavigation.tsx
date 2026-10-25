@@ -1,3 +1,7 @@
+/**
+ * LayerNavigation — навигация по слоям нейронной сети.
+ */
+
 import React, { memo } from 'react';
 
 interface LayerNavigationProps {
@@ -10,11 +14,13 @@ interface LayerNavigationProps {
   }>;
   hoveredChunk: { layerIndex: number; chunkIndex: number } | null;
   selectedScrollLayer: number | null;
+  panX: number;
   onLayerClick: (layerIndex: number) => void;
 }
 
 /**
  * Навигация по слоям с клавиатурным управлением и ARIA-атрибутами.
+ * При hover на чанк подсвечивает только соответствующий слой и чанк.
  */
 export const LayerNavigation = memo<LayerNavigationProps>(({
   layers, hoveredChunk, selectedScrollLayer, onLayerClick,
@@ -36,8 +42,9 @@ export const LayerNavigation = memo<LayerNavigationProps>(({
   >
     {layers.map((layer, li) => {
       const isSelected = selectedScrollLayer === li;
-      const isHoveredLayer = hoveredChunk && hoveredChunk.layerIndex === li;
-
+      // Подсветка только при hover на чанк этого слоя
+      const isChunkHovered = hoveredChunk?.layerIndex === li;
+      
       return (
         <button
           key={li}
@@ -55,13 +62,13 @@ export const LayerNavigation = memo<LayerNavigationProps>(({
           style={{
             minWidth: 100,
             padding: '5px 10px',
-            background: isSelected ? `${layer.color}22` : '#121220',
-            border: `1px solid ${isSelected ? layer.color : isHoveredLayer ? `${layer.color}88` : '#2a2a3e'}`,
+            background: (isSelected || isChunkHovered) ? `${layer.color}22` : '#121220',
+            border: `1px solid ${isSelected || isChunkHovered ? layer.color : '#2a2a3e'}`,
             borderRadius: 5,
             cursor: 'pointer',
             flexShrink: 0,
             transition: 'all 0.15s ease',
-            opacity: isHoveredLayer ? 1 : isSelected ? 0.95 : 0.7,
+            opacity: (isSelected || isChunkHovered) ? 0.95 : 0.7,
             color: 'inherit',
             fontSize: 'inherit',
             fontFamily: 'inherit',
@@ -69,6 +76,11 @@ export const LayerNavigation = memo<LayerNavigationProps>(({
         >
           <div style={{ fontSize: 9, fontWeight: 700, color: layer.color }}>
             {layer.shortName}
+            {isChunkHovered && hoveredChunk !== null && (
+              <span style={{ marginLeft: 4, fontSize: 8, opacity: 0.8 }}>
+                [{hoveredChunk.chunkIndex + 1}/10]
+              </span>
+            )}
           </div>
           <div style={{
             fontSize: 7,
