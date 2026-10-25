@@ -1,8 +1,5 @@
 /**
- * Connections — оптимизированный рендеринг связей между нейронами
- * 
- * Без весов — только визуализация связей.
- * Для реальных весов — загрузите JSON через кнопку в шапке.
+ * Connections — оптимизированный рендеринг связей между чанками
  */
 
 import React, { memo, useMemo } from 'react';
@@ -17,19 +14,21 @@ interface ConnectionsProps {
     x: number;
     y: number;
     layerIndex: number;
-    neuronIndex: number;
+    chunkIndex: number;
+    startNeuron: number;
+    endNeuron: number;
+    size: number;
   }>;
-  hoveredNeuron: { layerIndex: number; neuronIndex: number } | null;
+  hoveredChunk: { layerIndex: number; chunkIndex: number } | null;
 }
 
 /**
- * Оптимизированный рендеринг связей между нейронами.
- * Группирует линии для производительности.
+ * Оптимизированный рендеринг связей между чанками.
  */
 export const Connections = memo<ConnectionsProps>(({
-  layers, positions, hoveredNeuron,
+  layers, positions, hoveredChunk,
 }) => {
-  // Предварительно вычисляем все связи
+  // Предварительно вычисляем все связи между чанками
   const connectionData = useMemo(() => {
     const allConnections: Array<{
       id: string;
@@ -37,15 +36,15 @@ export const Connections = memo<ConnectionsProps>(({
       y1: number;
       x2: number;
       y2: number;
-      fromNeuron: number;
-      toNeuron: number;
+      fromChunk: number;
+      toChunk: number;
       fromLayer: number;
       toLayer: number;
     }> = [];
 
     for (let li = 0; li < layers.length - 1; li++) {
-      const cur = positions.filter(n => n.layerIndex === li);
-      const nxt = positions.filter(n => n.layerIndex === li + 1);
+      const cur = positions.filter(c => c.layerIndex === li);
+      const nxt = positions.filter(c => c.layerIndex === li + 1);
 
       for (let i = 0; i < cur.length; i++) {
         for (let j = 0; j < nxt.length; j++) {
@@ -53,12 +52,12 @@ export const Connections = memo<ConnectionsProps>(({
           const to = nxt[j];
           allConnections.push({
             id: `c${li}_${i}_${j}`,
-            x1: from.x,
-            y1: from.y,
-            x2: to.x,
-            y2: to.y,
-            fromNeuron: i,
-            toNeuron: j,
+            x1: from.x + 20,  // сдвиг вправо от чанка
+            y1: from.y + 10,
+            x2: to.x - 20,    // сдвиг влево к чанку
+            y2: to.y + 10,
+            fromChunk: i,
+            toChunk: j,
             fromLayer: li,
             toLayer: li + 1,
           });
@@ -69,24 +68,24 @@ export const Connections = memo<ConnectionsProps>(({
     return allConnections;
   }, [layers, positions]);
 
-  // Подсветка только для конкретного нейрона: входящие + исходящие связи
-  const highlightLayer = hoveredNeuron?.layerIndex ?? -1;
-  const highlightNeuron = hoveredNeuron?.neuronIndex ?? -1;
+  // Подсветка только для конкретного чанка: входящие + исходящие связи
+  const highlightLayer = hoveredChunk?.layerIndex ?? -1;
+  const highlightChunk = hoveredChunk?.chunkIndex ?? -1;
 
   return (
     <>
       {connectionData.map(conn => {
-        // Исходящая связь: из этого нейрона в следующий слой
+        // Исходящая связь: из этого чанка в следующий слой
         const isOutgoing =
           conn.fromLayer === highlightLayer &&
-          conn.fromNeuron === highlightNeuron;
+          conn.fromChunk === highlightChunk;
 
-        // Входящая связь: из предыдущего слоя в этот нейрон
+        // Входящая связь: из предыдущего слоя в этот чанк
         const isIncoming =
           conn.toLayer === highlightLayer &&
-          conn.toNeuron === highlightNeuron;
+          conn.toChunk === highlightChunk;
 
-        // Подсвечиваем только входящие и исходящие конкретного нейрона
+        // Подсвечиваем только входящие и исходящие конкретного чанка
         const isHighlighted = isOutgoing || isIncoming;
 
         // Определяем цвет слоя для связи

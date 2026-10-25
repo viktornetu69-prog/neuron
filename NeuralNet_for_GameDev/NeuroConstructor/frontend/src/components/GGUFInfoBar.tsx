@@ -32,12 +32,12 @@ interface ParameterInfo {
 }
 
 interface GGUFInfoBarProps {
-  hoveredNeuron: { layerIndex: number; neuronIndex: number } | null;
+  hoveredChunk: { layerIndex: number; chunkIndex: number } | null;
   layers: Array<{
     name: string;
     description: string;
     color: string;
-    neuronCount: number;
+    realSize: number;
   }>;
   architecture: ArchitectureInfo;
   parameters: ParameterInfo;
@@ -87,16 +87,16 @@ function formatNumber(num?: number): string {
 // ============================================================================
 
 const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
-  hoveredNeuron,
+  hoveredChunk,
   layers,
   architecture,
   parameters,
 }) => {
-  if (!hoveredNeuron || !layers[hoveredNeuron.layerIndex]) return null;
+  if (!hoveredChunk || !layers[hoveredChunk.layerIndex]) return null;
 
-  const layer = layers[hoveredNeuron.layerIndex];
+  const layer = layers[hoveredChunk.layerIndex];
   const layerType = getLayerType(
-    hoveredNeuron.layerIndex,
+    hoveredChunk.layerIndex,
     layers.length,
     architecture.model_family
   );
@@ -138,7 +138,7 @@ const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
             `FFN: расширение скрытого слоя в 4 раза`,
             `RoPE позиционные: θ = ${formatNumber(architecture.rope_theta)}`,
           ],
-          badge: `Слой ${hoveredNeuron.layerIndex + 1} из ${layers.length}`,
+          badge: `Слой ${hoveredChunk.layerIndex + 1} из ${layers.length}`,
         };
 
       case 'output':
@@ -157,7 +157,7 @@ const GGUFInfoBar: React.FC<GGUFInfoBarProps> = memo(({
         return {
           icon: '🔵',
           title: layer.name,
-          details: [`Количество нейронов: ${layer.neuronCount}`],
+          details: [`Количество нейронов: ${formatNumber(layer.realSize)}`],
           badge: '',
         };
     }

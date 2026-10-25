@@ -13,11 +13,11 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { NeuronNode } from './NeuronNode';
 import { Connections } from './Connections';
 import { LayerNavigation } from './LayerNavigation';
 import GGUFGroup from './GGUFGroup';
 import GGUFInfoBar from './GGUFInfoBar';
+import ChunkDetail from './ChunkDetail';
 import {
   GGUF_GROUP_CONFIG,
   determineGGUFGroupType,
@@ -55,7 +55,8 @@ interface NeuralNetVisualizerProps {
 interface LayerConfig {
   name: string;
   shortName: string;
-  neuronCount: number;
+  realSize: number;           // Реальный размер из GGUF
+  chunkCount: number;         // Количество чанков для визуализации
   color: string;
   colorLight: string;
   colorDark: string;
@@ -64,15 +65,18 @@ interface LayerConfig {
   activation: string;
 }
 
-interface NeuronPosition {
+interface ChunkPosition {
   x: number;
   y: number;
   layerIndex: number;
-  neuronIndex: number;
+  chunkIndex: number;
+  startNeuron: number;
+  endNeuron: number;
+  size: number;               // Реальный размер слоя
 }
 
 interface LayoutResult {
-  positions: NeuronPosition[];
+  positions: ChunkPosition[];
   minX: number;
   maxX: number;
   minY: number;
@@ -103,11 +107,12 @@ const DEFAULT_ARCHITECTURE: ArchitectureParams = {
   rope_theta: 10000,
 };
 
-const LAYER_GAP = 160;
+const LAYER_GAP = 200;
 const START_X = 80;
 const CENTER_Y = 280;
-const MIN_NEURONS = 6;
-const MAX_NEURONS = 10;
+
+// Чанк-система: каждый чанк представляет N нейронов для производительной визуализации
+const CHUNK_SIZE = 64;
 
 // ============================================================================
 // Утилиты
@@ -120,8 +125,14 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-const computeNeuronCount = (value: number): number => {
-  return Math.min(MAX_NEURONS, Math.max(MIN_NEURONS, Math.ceil(Math.log2(value + 1))));
+// Вычисляет количество чанков для данного размера
+const computeChunkCount = (size: number): number => {
+  return Math.ceil(size / CHUNK_SIZE);
+};
+
+// Для больших значений — компактное отображение
+const computeDisplayCount = (size: number): number => {
+  return Math.min(50, Math.max(10, Math.ceil(size / 128)));
 };
 
 const validateArchitecture = (arch: ArchitectureParams | undefined | null): ArchitectureParams => {
@@ -158,7 +169,8 @@ export function NeuralNetVisualizer({
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [hoveredNeuron, setHoveredNeuron] = useState<{ layerIndex: number; neuronIndex: number } | null>(null);
+  const [hoveredChunk, setHoveredChunk] = useState<{ layerIndex: number; chunkIndex: number } | null>(null);
+  const [focusedChunk, setFocusedChunk] = useState<{ layerIndex: number; chunkIndex: number } | null>(null);
   const [userPanned, setUserPanned] = useState(false);
   const [selectedScrollLayer, setSelectedScrollLayer] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -183,52 +195,58 @@ export function NeuralNetVisualizer({
     const numLayers = Number(arch.num_layers ?? DEFAULT_ARCHITECTURE.num_layers);
     const heads = Number(arch.num_heads ?? DEFAULT_ARCHITECTURE.num_heads);
     const headDim = Number(arch.head_dim ?? Math.round(hiddenSize / heads));
-    const inputNeurons = computeNeuronCount(vocabSize);
-    const hiddenNeurons = computeNeuronCount(hiddenSize);
     const result: LayerConfig[] = [];
 
+    // Input Layer — реальный vocab_size
     result.push({
       name: 'Input Layer',
       shortName: 'Вход',
-      neuronCount: inputNeurons,
+      realSize: vocabSize,
+      chunkCount: computeChunkCount(vocabSize),
       color: GGUF_GROUP_CONFIG.input.color,
       colorLight: GGUF_GROUP_CONFIG.input.colorLight,
       colorDark: GGUF_GROUP_CONFIG.input.colorDark,
-      description: `${formatNumber(vocabSize)} токенов`,
+      description: `vocab: ${formatNumber(vocabSize)} (${computeChunkCount(vocabSize)} чанков × ${CHUNK_SIZE})`,
       ggufType: 'input',
       activation: 'linear',
     });
 
+    // Embedding Layer — реальный hidden_size
     result.push({
       name: 'Embedding Layer',
       shortName: 'Встраивания',
-      neuronCount: hiddenNeurons,
+      realSize: hiddenSize,
+      chunkCount: computeChunkCount(hiddenSize),
       color: GGUF_GROUP_CONFIG.embedding.color,
       colorLight: GGUF_GROUP_CONFIG.embedding.colorLight,
       colorDark: GGUF_GROUP_CONFIG.embedding.colorDark,
-      description: `${vocabSize} × ${hiddenSize} matrix`,
+      description: `${formatNumber(vocabSize)} × ${formatNumber(hiddenSize)} matrix`,
       ggufType: 'embedding',
       activation: 'linear',
     });
 
+    // Transformer blocks — реальный hidden_size
     for (let i = 0; i < numLayers; i++) {
       result.push({
         name: `Transformer Block ${i + 1}/${numLayers}`,
         shortName: `B${i + 1}`,
-        neuronCount: hiddenNeurons,
+        realSize: hiddenSize,
+        chunkCount: computeChunkCount(hiddenSize),
         color: i % 2 === 0 ? GGUF_GROUP_CONFIG.hidden.color : GGUF_GROUP_CONFIG.hidden.colorLight,
         colorLight: i % 2 === 0 ? GGUF_GROUP_CONFIG.hidden.colorLight : '#ffffff',
         colorDark: i % 2 === 0 ? GGUF_GROUP_CONFIG.hidden.colorDark : '#84cc16',
-        description: `${heads}h × ${headDim}d`,
+        description: `${heads}h × ${headDim}d · ${formatNumber(hiddenSize)} нейронов`,
         ggufType: 'hidden',
         activation: 'gelu',
       });
     }
 
+    // Output Layer — реальный vocab_size
     result.push({
       name: 'Output Layer',
       shortName: 'Выход',
-      neuronCount: inputNeurons,
+      realSize: vocabSize,
+      chunkCount: computeChunkCount(vocabSize),
       color: GGUF_GROUP_CONFIG.output.color,
       colorLight: GGUF_GROUP_CONFIG.output.colorLight,
       colorDark: GGUF_GROUP_CONFIG.output.colorDark,
@@ -257,22 +275,36 @@ export function NeuralNetVisualizer({
     return result;
   }, [layers, activeFilter, searchQuery]);
 
-  // Layout
+  // Layout чанков — каждый чанк представляет CHUNK_SIZE нейронов
   const layout: LayoutResult = useMemo(() => {
-    const positions: NeuronPosition[] = [];
+    const positions: ChunkPosition[] = [];
+
     filteredLayers.forEach((layer, layerIndex) => {
       const x = START_X + layerIndex * LAYER_GAP;
-      const neuronGap = Math.min(48, Math.max(28, 380 / Math.max(layer.neuronCount, 2)));
-      const startY = CENTER_Y - ((layer.neuronCount - 1) * neuronGap) / 2;
-      for (let i = 0; i < layer.neuronCount; i++) {
-        positions.push({ x, y: startY + i * neuronGap, layerIndex, neuronIndex: i });
+      // Для больших слоёв — компактный режим (max 50 чанков визуально)
+      const displayCount = computeDisplayCount(layer.realSize);
+      const chunkHeight = Math.min(32, Math.max(8, 600 / displayCount));
+      const startY = CENTER_Y - ((displayCount - 1) * chunkHeight) / 2;
+
+      for (let i = 0; i < displayCount; i++) {
+        const startNeuron = Math.floor((i / displayCount) * layer.realSize);
+        const endNeuron = Math.floor(((i + 1) / displayCount) * layer.realSize) - 1;
+        positions.push({
+          x,
+          y: startY + i * chunkHeight,
+          layerIndex,
+          chunkIndex: i,
+          startNeuron,
+          endNeuron,
+          size: layer.realSize,
+        });
       }
     });
 
-    const minX = Math.min(...positions.map(n => n.x)) - 80;
-    const maxX = Math.max(...positions.map(n => n.x)) + 80;
-    const minY = Math.min(...positions.map(n => n.y)) - 50;
-    const maxY = Math.max(...positions.map(n => n.y)) + 50;
+    const minX = Math.min(...positions.map(c => c.x)) - 80;
+    const maxX = Math.max(...positions.map(c => c.x)) + 80;
+    const minY = Math.min(...positions.map(c => c.y)) - 40;
+    const maxY = Math.max(...positions.map(c => c.y)) + 40;
 
     return {
       positions,
@@ -363,7 +395,7 @@ export function NeuralNetVisualizer({
     setSelectedScrollLayer(layerIndex);
     setUserPanned(true);
     focusLayerRef.current = layerIndex;
-    const layerPositions = layout.positions.filter(n => n.layerIndex === layerIndex);
+    const layerPositions = layout.positions.filter(c => c.layerIndex === layerIndex);
     if (layerPositions.length === 0) return;
     const cx = layerPositions[0].x;
     const cy = layerPositions[0].y;
@@ -373,11 +405,19 @@ export function NeuralNetVisualizer({
     });
   }, [layout.positions, displayZoom, containerSize]);
 
-  const handleNeuronHover = useCallback((layerIndex: number, neuronIndex: number) => {
-    setHoveredNeuron({ layerIndex, neuronIndex });
+  const handleChunkHover = useCallback((layerIndex: number, chunkIndex: number) => {
+    setHoveredChunk({ layerIndex, chunkIndex });
   }, []);
 
-  const handleNeuronLeave = useCallback(() => setHoveredNeuron(null), []);
+  const handleChunkLeave = useCallback(() => setHoveredChunk(null), []);
+
+  const handleChunkClick = useCallback((layerIndex: number, chunkIndex: number) => {
+    setFocusedChunk({ layerIndex, chunkIndex });
+  }, []);
+
+  const handleChunkBack = useCallback(() => {
+    setFocusedChunk(null);
+  }, []);
 
   // Клавиатурная навигация
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -427,7 +467,7 @@ export function NeuralNetVisualizer({
         index: i,
         name: l.name,
         type: l.ggufType,
-        neurons: l.neuronCount,
+        neurons: l.realSize,
         activation: l.activation,
         description: l.description,
       })),
@@ -637,49 +677,92 @@ export function NeuralNetVisualizer({
             ))}
           </defs>
 
-          {/* Connections with weights — рисуем перед нейронами */}
+          {/* Connections — рисуем перед чанками */}
           <Connections
             layers={filteredLayers.map(l => ({ color: l.color, colorLight: l.colorLight, colorDark: l.colorDark }))}
             positions={layout.positions}
-            hoveredNeuron={hoveredNeuron}
+            hoveredChunk={hoveredChunk}
           />
 
-          {/* Neurons */}
-          {layout.positions.map((neuron) => {
-            const layer = filteredLayers[neuron.layerIndex];
-            const isHovered = !!hoveredNeuron && hoveredNeuron.layerIndex === neuron.layerIndex && hoveredNeuron.neuronIndex === neuron.neuronIndex;
-            // Затемняем все нейроны, КРОМЕ hovered — проверям по слою И индексу
-            const isDimmed = hoveredNeuron !== null && 
-              (hoveredNeuron.layerIndex !== neuron.layerIndex || 
-               hoveredNeuron.neuronIndex !== neuron.neuronIndex);
+          {/* Чанки — визуализация слоёв */}
+          {layout.positions.map((chunk) => {
+            const layer = filteredLayers[chunk.layerIndex];
+            const isHovered = !!hoveredChunk && hoveredChunk.layerIndex === chunk.layerIndex && hoveredChunk.chunkIndex === chunk.chunkIndex;
+            // Затемняем все чанки, КРОМЕ hovered
+            const isDimmed = hoveredChunk !== null &&
+              (hoveredChunk.layerIndex !== chunk.layerIndex ||
+               hoveredChunk.chunkIndex !== chunk.chunkIndex);
+
+            // Градиент для чанка — цвет зависит от индекса (heatmap)
+            const intensity = chunk.startNeuron / Math.max(1, chunk.size - 1);
+            const fillColor = isHovered ? layer.colorLight : layer.color;
+
             return (
-              <NeuronNode
-                key={`n${neuron.layerIndex}_${neuron.neuronIndex}`}
-                x={neuron.x} y={neuron.y}
-                layerIndex={neuron.layerIndex} neuronIndex={neuron.neuronIndex}
-                layerColor={layer.color} layerColorLight={layer.colorLight} layerColorDark={layer.colorDark}
-                layerName={layer.name}
-                isHovered={isHovered} isDimmed={isDimmed}
-                onHover={() => handleNeuronHover(neuron.layerIndex, neuron.neuronIndex)}
-                onLeave={handleNeuronLeave}
-                onFocus={() => handleNeuronHover(neuron.layerIndex, neuron.neuronIndex)}
-                onBlur={handleNeuronLeave}
-              />
+              <g
+                key={`c${chunk.layerIndex}_${chunk.chunkIndex}`}
+                onClick={() => handleChunkClick(chunk.layerIndex, chunk.chunkIndex)}
+                onMouseEnter={() => handleChunkHover(chunk.layerIndex, chunk.chunkIndex)}
+                onMouseLeave={handleChunkLeave}
+                style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
+                opacity={isDimmed ? 0.15 : 1}
+              >
+                {/* Glow при hover */}
+                {isHovered && (
+                  <rect
+                    x={chunk.x - 3}
+                    y={chunk.y - 3}
+                    width="46"
+                    height="26"
+                    fill="none"
+                    stroke={layer.color}
+                    strokeWidth="2"
+                    rx="3"
+                    opacity="0.6"
+                  />
+                )}
+
+                {/* Основной прямоугольник чанка */}
+                <rect
+                  x={chunk.x}
+                  y={chunk.y}
+                  width="40"
+                  height="20"
+                  fill={fillColor}
+                  opacity={0.3 + intensity * 0.4}
+                  stroke={layer.color}
+                  strokeWidth={isHovered ? 2 : 1}
+                  rx="3"
+                  style={{ transition: 'stroke-width 0.2s ease, opacity 0.2s ease' }}
+                />
+
+                {/* Текст: индекс чанка */}
+                <text
+                  x={chunk.x + 20}
+                  y={chunk.y + 8}
+                  textAnchor="middle"
+                  fill="white"
+                  fontSize="7"
+                  fontWeight="600"
+                  style={{ pointerEvents: 'none', userSelect: 'none' }}
+                >
+                  {chunk.chunkIndex + 1}
+                </text>
+              </g>
             );
           })}
 
           {/* Layer labels — подписи слоёв над каждым слоем */}
           {filteredLayers.map((layer, layerIndex) => {
-            const layerPositions = layout.positions.filter(n => n.layerIndex === layerIndex);
+            const layerPositions = layout.positions.filter(c => c.layerIndex === layerIndex);
             if (layerPositions.length === 0) return null;
-            
-            const firstNeuron = layerPositions[0];
-            const maxYInLayer = Math.max(...layerPositions.map(n => n.y));
-            
+
+            const firstChunk = layerPositions[0];
+            const maxYInLayer = Math.max(...layerPositions.map(c => c.y));
+
             return (
               <text
                 key={`label-${layerIndex}`}
-                x={firstNeuron.x}
+                x={firstChunk.x}
                 y={maxYInLayer + 35}
                 textAnchor="middle"
                 fill={layer.color}
@@ -692,6 +775,57 @@ export function NeuralNetVisualizer({
             );
           })}
 
+          {/* Tooltip при hover на чанк */}
+          {hoveredChunk && (() => {
+            const chunk = layout.positions.find(c => c.layerIndex === hoveredChunk.layerIndex && c.chunkIndex === hoveredChunk.chunkIndex);
+            if (!chunk) return null;
+            const layer = filteredLayers[chunk.layerIndex];
+            return (
+              <g>
+                <rect
+                  x={chunk.x - 80}
+                  y={chunk.y - 55}
+                  width="160"
+                  height="48"
+                  rx="6"
+                  fill="rgba(0,0,0,0.95)"
+                  stroke={layer.color}
+                  strokeWidth="1.5"
+                  style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }}
+                />
+                <text
+                  x={chunk.x}
+                  y={chunk.y - 38}
+                  textAnchor="middle"
+                  fill="white"
+                  fontSize="10"
+                  fontWeight="600"
+                >
+                  {layer.name}
+                </text>
+                <text
+                  x={chunk.x}
+                  y={chunk.y - 24}
+                  textAnchor="middle"
+                  fill="#8888aa"
+                  fontSize="8"
+                >
+                  Чанк {chunk.chunkIndex + 1}: нейроны {chunk.startNeuron}–{chunk.endNeuron}
+                </text>
+                <text
+                  x={chunk.x}
+                  y={chunk.y - 13}
+                  textAnchor="middle"
+                  fill="#7c6ff7"
+                  fontSize="8"
+                  fontWeight="600"
+                >
+                  Всего в слое: {formatNumber(chunk.size)}
+                </text>
+              </g>
+            );
+          })()}
+
           {/* Flow arrow */}
           {filteredLayers.length > 1 && (
             <g>
@@ -701,20 +835,93 @@ export function NeuralNetVisualizer({
             </g>
           )}
         </svg>
+      </div>
 
-        <div style={{
-          position: 'absolute', bottom: 8, left: 12, padding: '4px 10px',
-          background: 'rgba(18,18,32,0.85)', border: '1px solid #2a2a3e',
-          borderRadius: 4, fontSize: 10, color: '#666688', pointerEvents: 'none',
-        }}>
-          Перетаскивание мышью • {showSearch ? 'ESC для закрытия поиска' : 'Нажмите / для поиска'}
-        </div>
+      {/* ChunkDetail — крупный план чанка (поверх основного вида) */}
+      {focusedChunk && (() => {
+        const chunk = layout.positions.find(
+          c => c.layerIndex === focusedChunk.layerIndex && c.chunkIndex === focusedChunk.chunkIndex
+        );
+        if (!chunk) return null;
+        const layer = filteredLayers[chunk.layerIndex];
+
+        // Предыдущий чанк (из предыдущего слоя)
+        const prevLayer = focusedChunk.layerIndex > 0
+          ? layout.positions.find(c => c.layerIndex === focusedChunk.layerIndex - 1)
+          : null;
+        const nextLayer = focusedChunk.layerIndex < filteredLayers.length - 1
+          ? layout.positions.find(c => c.layerIndex === focusedChunk.layerIndex + 1)
+          : null;
+
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(5, 5, 10, 0.9)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 100,
+              backdropFilter: 'blur(4px)',
+            }}
+            onClick={handleChunkBack}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: '#0a0a0f',
+                border: `1px solid ${layer.color}`,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 800,
+                maxHeight: '90%',
+                overflow: 'auto',
+                boxShadow: `0 0 40px ${layer.color}33`,
+              }}
+            >
+              <ChunkDetail
+                chunk={{
+                  x: 0,
+                  y: 0,
+                  layerIndex: chunk.layerIndex,
+                  chunkIndex: chunk.chunkIndex,
+                  startNeuron: chunk.startNeuron,
+                  endNeuron: chunk.endNeuron,
+                  size: chunk.size,
+                }}
+                layerName={layer.name}
+                layerColor={layer.color}
+                layerColorLight={layer.colorLight}
+                onBack={handleChunkBack}
+                incomingNeighbors={prevLayer ? [{
+                  startNeuron: prevLayer.startNeuron,
+                  endNeuron: prevLayer.endNeuron,
+                  prevChunkIndex: prevLayer.chunkIndex,
+                }] : []}
+                outgoingNeighbors={nextLayer ? [{
+                  startNeuron: nextLayer.startNeuron,
+                  endNeuron: nextLayer.endNeuron,
+                  nextChunkIndex: nextLayer.chunkIndex,
+                }] : []}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      <div style={{
+        position: 'absolute', bottom: 8, left: 12, padding: '4px 10px',
+        background: 'rgba(18,18,32,0.85)', border: '1px solid #2a2a3e',
+        borderRadius: 4, fontSize: 10, color: '#666688', pointerEvents: 'none',
+      }}>
+        Перетаскивание мышью • {showSearch ? 'ESC для закрытия поиска' : 'Нажмите / для поиска'}
       </div>
 
       {/* ===== Навигация по слоям ===== */}
       <LayerNavigation
         layers={filteredLayers}
-        hoveredNeuron={hoveredNeuron}
+        hoveredChunk={hoveredChunk}
         selectedScrollLayer={selectedScrollLayer}
         onLayerClick={handleScrollLayerClick}
       />
@@ -734,7 +941,7 @@ export function NeuralNetVisualizer({
 
       {/* ===== GGUF Info Bar ===== */}
       <GGUFInfoBar
-        hoveredNeuron={hoveredNeuron}
+        hoveredChunk={hoveredChunk}
         layers={filteredLayers}
         architecture={arch}
         parameters={parameters || {}}
