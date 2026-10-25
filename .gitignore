@@ -1,5 +1,15 @@
 # Large model files - do not commit
 *.gguf
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Model directories
+**/models/teacher/
+**/models/student/
+NeuroConstructor.Core/models/teacher/
+NeuroConstructor.Core/models/student/
 
 # Node modules
 **/node_modules/
