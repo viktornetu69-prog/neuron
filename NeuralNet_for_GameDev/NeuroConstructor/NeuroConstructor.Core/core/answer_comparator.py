@@ -142,34 +142,39 @@ class AnswerComparator:
         if weights is None:
             weights = [0.25, 0.25, 0.25, 0.25]
 
-        # Modified precision for each n-gram order
-        precisions = []
-        ref_counts = Counter()
-        hyp_counts = Counter()
+        # Count n-grams for each order
+        ref_counts = [Counter() for _ in range(max_n + 1)]
+        hyp_counts = [Counter() for _ in range(max_n + 1)]
 
         for order in range(1, max_n + 1):
-            for ng in _word_ngrams(hyp_tokens, order):
-                hyp_counts[ng] += 1
             for ng in _word_ngrams(ref_tokens, order):
-                ref_counts[ng] += 1
+                ref_counts[order][ng] += 1
+            for ng in _word_ngrams(hyp_tokens, order):
+                hyp_counts[order][ng] += 1
 
-        clipped_total = 0
-        total = 0
+        # Modified precision for each order
+        log_precision = 0.0
+        valid_orders = 0
         for order in range(1, max_n + 1):
-            clipped = 0
-            for ng, count in hyp_counts.items():
-                if ng in ref_counts:
-                    clipped += min(count, ref_counts[ng])
-            clipped_total += clipped
-            total += len(_word_ngrams(hyp_tokens, order))
+            ngrams = _word_ngrams(hyp_tokens, order)
+            if not ngrams:
+                continue
+            clipped = sum(
+                min(hyp_counts[order][ng], ref_counts[order][ng])
+                for ng in ngrams
+            )
+            precision = clipped / len(ngrams)
+            if precision > 0:
+                log_precision += weights[order - 1] * math.log(precision)
+                valid_orders += 1
 
-        if total == 0:
+        if valid_orders == 0:
             return 0.0
 
-        avg_precision = clipped_total / total
+        avg_precision = math.exp(log_precision)
 
         # Brevity penalty
-        bp = min(1.0, math.exp(1 - ref_tokens.count() / max(hyp_tokens.count(), 1)))
+        bp = min(1.0, math.exp(1 - len(ref_tokens) / max(len(hyp_tokens), 1)))
 
         return bp * avg_precision
 
@@ -306,12 +311,12 @@ class ComparisonEngine:
     ) -> ComparisonResult:
         """Compare a single pair of answers."""
         # Compute metrics
-        cosine_char = self.cosine_similarity_char(teacher_answer, student_answer)
-        cosine_word = self.cosine_similarity_word(teacher_answer, student_answer)
-        bleu = self.bleu_score(teacher_answer, student_answer)
-        rouge_l = self.rouge_l(teacher_answer, student_answer)
-        em = 1.0 if self.exact_match(teacher_answer, student_answer) else 0.0
-        precision, recall, token_f1 = self.token_f1(teacher_answer, student_answer)
+        cosine_char = AnswerComparator.cosine_similarity_char(teacher_answer, student_answer)
+        cosine_word = AnswerComparator.cosine_similarity_word(teacher_answer, student_answer)
+        bleu = AnswerComparator.bleu_score(teacher_answer, student_answer)
+        rouge_l = AnswerComparator.rouge_l(teacher_answer, student_answer)
+        em = 1.0 if AnswerComparator.exact_match(teacher_answer, student_answer) else 0.0
+        precision, recall, token_f1 = AnswerComparator.token_f1(teacher_answer, student_answer)
 
         # Weighted overall score
         w = self.weights
