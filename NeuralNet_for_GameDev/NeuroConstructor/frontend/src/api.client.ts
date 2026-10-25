@@ -69,8 +69,16 @@ export async function convertModel(teacherPath: string, studentPath: string) {
 }
 
 export async function createStudentFromScratch(architecture?: any) {
-  const response = await api.post('/api/models/student/create', {
-    architecture: architecture || {},
+  const response = await api.post('/api/models/student/scratch', {
+    model_family: architecture?.model_family || 'qwen3',
+    hidden_size: architecture?.hidden_size || 768,
+    num_layers: architecture?.num_layers || 12,
+    num_heads: architecture?.num_heads || 12,
+    num_kv_heads: architecture?.num_kv_heads || 12,
+    vocab_size: architecture?.vocab_size || 32000,
+    max_position_embeddings: architecture?.max_position_embeddings || 2048,
+    rope_theta: architecture?.rope_theta || 10000,
+    head_dim: architecture?.head_dim || 64,
   });
   return response.data;
 }

@@ -49,6 +49,17 @@ class LoadTeacherResponse(BaseModel):
 class CreateStudentRequest(BaseModel):
     teacher_model_path: str
 
+class StudentArchitectureRequest(BaseModel):
+    model_family: str = "qwen3"
+    hidden_size: int = 768
+    num_layers: int = 12
+    num_heads: int = 12
+    num_kv_heads: int = 12
+    vocab_size: int = 32000
+    max_position_embeddings: int = 2048
+    rope_theta: float = 10000.0
+    head_dim: int = 64
+
 class CreateStudentResponse(BaseModel):
     status: str
     student_model_info: str = ""
@@ -228,6 +239,54 @@ async def create_student_model(request: CreateStudentRequest):
         )
     except Exception as e:
         logger.error(f"Create student error: {e}")
+        return CreateStudentResponse(status="error", error_message=str(e))
+
+@app.post("/api/models/student/scratch", response_model=CreateStudentResponse)
+async def create_student_from_scratch(request: StudentArchitectureRequest):
+    """Создать Student модель с нуля по параметрам архитектуры"""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        # Генерируем JSON конфиг Student архитектуры
+        import json
+        import os
+        from datetime import datetime
+        
+        student_config = {
+            "architecture": {
+                "model_family": request.model_family,
+                "hidden_size": request.hidden_size,
+                "num_layers": request.num_layers,
+                "num_heads": request.num_heads,
+                "num_kv_heads": request.num_kv_heads,
+                "vocab_size": request.vocab_size,
+                "max_position_embeddings": request.max_position_embeddings,
+                "rope_theta": request.rope_theta,
+                "head_dim": request.head_dim,
+            },
+            "created_at": datetime.now().isoformat(),
+            "type": "student_template",
+        }
+        
+        # Сохраняем конфиг
+        student_dir = "models/student"
+        os.makedirs(student_dir, exist_ok=True)
+        
+        filename = f"{request.model_family}_student_{request.hidden_size}x{request.num_layers}_{int(datetime.now().timestamp())}.json"
+        filepath = os.path.join(student_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(student_config, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Student model created from scratch: {filepath}")
+        
+        return CreateStudentResponse(
+            status="created",
+            student_model_info=f"Student {request.model_family} created: {request.hidden_size}h x {request.num_layers}L x {request.num_heads}H",
+            compression_applied=False,
+        )
+    except Exception as e:
+        logger.error(f"Create student from scratch error: {e}")
         return CreateStudentResponse(status="error", error_message=str(e))
 
 @app.post("/api/models/convert", response_model=ConvertResponse)
