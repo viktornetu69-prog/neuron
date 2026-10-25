@@ -18,6 +18,7 @@ import { LayerNavigation } from './LayerNavigation';
 import GGUFGroup from './GGUFGroup';
 import GGUFInfoBar from './GGUFInfoBar';
 import ChunkDetail from './ChunkDetail';
+import { ChunkCanvas } from './chunk-system/ChunkCanvas';
 import {
   GGUF_GROUP_CONFIG,
   determineGGUFGroupType,
@@ -171,6 +172,7 @@ export function NeuralNetVisualizer({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredChunk, setHoveredChunk] = useState<{ layerIndex: number; chunkIndex: number } | null>(null);
   const [focusedChunk, setFocusedChunk] = useState<{ layerIndex: number; chunkIndex: number } | null>(null);
+  const [showChunkCanvas, setShowChunkCanvas] = useState(false);
   const [userPanned, setUserPanned] = useState(false);
   const [selectedScrollLayer, setSelectedScrollLayer] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -419,6 +421,10 @@ export function NeuralNetVisualizer({
     setFocusedChunk(null);
   }, []);
 
+  const handleChunkCanvasToggle = useCallback(() => {
+    setShowChunkCanvas(prev => !prev);
+  }, []);
+
   // Клавиатурная навигация
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -506,6 +512,22 @@ export function NeuralNetVisualizer({
 
   const arrowEndX = START_X + (filteredLayers.length - 1) * LAYER_GAP + 50;
 
+  if (showChunkCanvas) {
+    return (
+      <ChunkCanvas
+        architecture={{
+          model_family: arch.model_family,
+          vocab_size: arch.vocab_size,
+          hidden_size: arch.hidden_size,
+          num_layers: arch.num_layers,
+          num_heads: arch.num_heads,
+          head_dim: arch.head_dim,
+        }}
+        onBack={handleChunkCanvasToggle}
+      />
+    );
+  }
+
   return (
     <div
       ref={containerRef}
@@ -537,6 +559,22 @@ export function NeuralNetVisualizer({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {/* Чанк-карта */}
+          <button
+            onClick={handleChunkCanvasToggle}
+            style={{
+              padding: '4px 10px',
+              background: showChunkCanvas ? '#7c6ff7' : '#1a1a2e',
+              border: '1px solid #2a2a3e',
+              borderRadius: 4,
+              color: showChunkCanvas ? 'white' : '#8888aa',
+              cursor: 'pointer',
+              fontSize: 10,
+              fontWeight: 600,
+            }}
+          >
+            🗺️ Карта
+          </button>
           {/* Поиск */}
           <button onClick={() => setShowSearch(!showSearch)} style={{
             width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
