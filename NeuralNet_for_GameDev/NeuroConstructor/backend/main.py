@@ -243,7 +243,7 @@ async def create_student_model(request: CreateStudentRequest):
 
 @app.post("/api/models/student/scratch", response_model=CreateStudentResponse)
 async def create_student_from_scratch(request: StudentArchitectureRequest):
-    """Создать Student модель с нуля по параметрам архитектуры"""
+    """Создать Student модель с нуля по параметрам архитектуры через ModelConverter"""
     logger.info(f"Creating student from scratch: {request.model_family}")
     
     if not server_state["engine"]:
@@ -251,38 +251,72 @@ async def create_student_from_scratch(request: StudentArchitectureRequest):
         raise HTTPException(status_code=503, detail="Engine not initialized")
     
     try:
-        # Генерируем JSON конфиг Student архитектуры
-        import json
-        import os
-        from datetime import datetime
+        from NeuroConstructor.Core.core.model_converter import ModelConverter
         
+        # Получаем корневую папку проекта
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        student_dir = os.path.join(project_root, "models", "student")
+        os.makedirs(student_dir, exist_ok=True)
+        
+        # Создаём ModelConverter
+        converter = ModelConverter()
+        
+        # Создаём конфигурацию Student модели с нуля
         student_config = {
+            "model_type": "student",
             "architecture": {
                 "model_family": request.model_family,
+                "vocab_size": request.vocab_size,
                 "hidden_size": request.hidden_size,
                 "num_layers": request.num_layers,
                 "num_heads": request.num_heads,
                 "num_kv_heads": request.num_kv_heads,
-                "vocab_size": request.vocab_size,
+                "head_dim": request.head_dim,
                 "max_position_embeddings": request.max_position_embeddings,
                 "rope_theta": request.rope_theta,
-                "head_dim": request.head_dim,
             },
-            "created_at": datetime.now().isoformat(),
-            "type": "student_template",
+            "loading": {
+                "initialized": True,
+                "weights_loaded": False,
+                "compression_applied": False,
+            },
+            "compression": {
+                "applied": False,
+                "method": "none",
+                "ratio": 0.0,
+                "specialized_layers": [],
+            },
+            "metadata": {
+                "created": datetime.now().isoformat(),
+                "version": "stage6.0",
+                "type": "student_template",
+            },
         }
         
-        # Сохраняем конфиг
-        student_dir = "models/student"
-        os.makedirs(student_dir, exist_ok=True)
-        
-        filename = f"{request.model_family}_student_{request.hidden_size}x{request.num_layers}_{int(datetime.now().timestamp())}.json"
-        filepath = os.path.join(student_dir, filename)
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
+        # Сохраняем config.json
+        config_path = os.path.join(student_dir, "config.json")
+        with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(student_config, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Student model created successfully: {filepath}")
+        # Сохраняем model_info.json
+        model_info = {
+            "model_type": "student",
+            "format": "template",
+            "path": student_dir,
+            "architecture": student_config["architecture"],
+            "compression": student_config["compression"],
+            "metadata": student_config["metadata"],
+        }
+        info_path = os.path.join(student_dir, "model_info.json")
+        with open(info_path, 'w', encoding='utf-8') as f:
+            json.dump(model_info, f, indent=2, ensure_ascii=False)
+        
+        # Сохраняем weights.bin (пустой placeholder)
+        weights_path = os.path.join(student_dir, "weights.bin")
+        with open(weights_path, 'w') as f:
+            f.write(f"# Student model template: {request.model_family} {request.hidden_size}h x {request.num_layers}L x {request.num_heads}H")
+        
+        logger.info(f"Student model created successfully: {student_dir}")
         
         return CreateStudentResponse(
             status="created",
