@@ -598,20 +598,32 @@ async def load_model_to_engine(request: LLMLoadRequest):
                 error="llama-cpp-python not installed"
             )
         
-        # Resolve model path
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(backend_dir)
-        full_path = os.path.join(project_root, request.model_path)
+        # Resolve model path — 3 варианта расположения
+        base_paths = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "NeuroConstructor.Core", "models"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "NeuroConstructor.Core", "models"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models"),
+        ]
         
-        if not os.path.exists(full_path):
+        model_file = None
+        model_dir = request.model_path.split('/')[0] if '/' in request.model_path else "teacher"
+        model_filename = request.model_path.split('/')[-1] if '/' in request.model_path else request.model_path
+        
+        for base_path in base_paths:
+            candidate = os.path.join(base_path, model_dir, model_filename)
+            if os.path.exists(candidate):
+                model_file = candidate
+                break
+        
+        if not model_file:
             return LLMLoadResponse(
                 success=False,
-                error=f"Model file not found: {full_path}"
+                error=f"Model file not found. Searched in: {base_paths}\nRequested: {request.model_path}"
             )
         
         # Load model
         engine = LlamaCppEngine(
-            model_path=full_path,
+            model_path=model_file,
             n_gpu_layers=-1,  # Offload all to GPU
             n_threads=8,
         )
@@ -620,8 +632,8 @@ async def load_model_to_engine(request: LLMLoadRequest):
         if engine.model:
             return LLMLoadResponse(
                 success=True,
-                model_path=full_path,
-                model_size_gb=round(os.path.getsize(full_path) / (1024**3), 2),
+                model_path=model_file,
+                model_size_gb=round(os.path.getsize(model_file) / (1024**3), 2),
             )
         else:
             return LLMLoadResponse(

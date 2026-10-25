@@ -98,7 +98,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model_path: `models/${modelType}/${modelName}`,
+          model_path: `${modelType}/${modelName}`,
           model_type: modelType,
         }),
       });
