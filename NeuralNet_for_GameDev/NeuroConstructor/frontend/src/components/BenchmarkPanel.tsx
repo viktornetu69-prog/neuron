@@ -37,6 +37,20 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
   const [teacherModels, setTeacherModels] = useState<any[]>([]);
   const [studentModels, setStudentModels] = useState<any[]>([]);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [llmStatus, setLlmStatus] = useState<any>(null);
+
+  // ===== Load LLM status =====
+  const loadLlmStatus = useCallback(async () => {
+    if (!isServerAvailable) return;
+
+    try {
+      const response = await fetch('http://localhost:8000/api/llm/status');
+      const data = await response.json();
+      setLlmStatus(data);
+    } catch (err: any) {
+      console.error('Failed to load LLM status:', err);
+    }
+  }, [isServerAvailable]);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -66,7 +80,8 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
   // Load models on mount
   React.useEffect(() => {
     loadModels();
-  }, [loadModels]);
+    loadLlmStatus();
+  }, [loadModels, loadLlmStatus]);
 
   // ===== Run benchmark =====
   const handleRun = useCallback(async () => {
@@ -309,7 +324,49 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
         {/* LEFT: Configuration */}
         <div style={styles.configPanel}>
           <div style={styles.section}>
-            <div style={styles.sectionTitle}>🤖 LLM Engine Settings</div>
+            <div style={styles.sectionTitle}>🤖 LLM Engine Status</div>
+            
+            {llmStatus ? (
+              <>
+                <div style={styles.metricRow}>
+                  <span style={styles.metricLabel}>llama-cpp-python</span>
+                  <span style={{
+                    ...styles.metricValue,
+                    color: llmStatus.llama_cpp_available ? '#4caf50' : '#f44336',
+                  }}>
+                    {llmStatus.llama_cpp_available ? '✅ Available' : '❌ Not installed'}
+                  </span>
+                </div>
+                <div style={styles.metricRow}>
+                  <span style={styles.metricLabel}>Backend status</span>
+                  <span style={{
+                    ...styles.metricValue,
+                    color: llmStatus.backend_status === 'ready' ? '#4caf50' : '#f44336',
+                  }}>
+                    {llmStatus.backend_status}
+                  </span>
+                </div>
+                <div style={styles.metricRow}>
+                  <span style={styles.metricLabel}>Teacher model</span>
+                  <span style={styles.metricValue}>
+                    {llmStatus.model_loaded ? '✅ Loaded' : '○ None'}
+                  </span>
+                </div>
+                {llmStatus.model_path && (
+                  <div style={{ color: '#8888aa', fontSize: 11, marginTop: 4 }}>
+                    {llmStatus.model_path}
+                    <br />
+                    Size: {llmStatus.model_size_gb} GB
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ color: '#666688', fontSize: 12 }}>Loading...</div>
+            )}
+          </div>
+
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>⚙️ Select Models</div>
 
             <label style={styles.label}>Teacher Model</label>
             <select

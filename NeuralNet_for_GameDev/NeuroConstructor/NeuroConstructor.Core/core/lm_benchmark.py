@@ -20,11 +20,12 @@ from answer_comparator import AnswerComparator, ComparisonEngine, BenchmarkRepor
 
 # Import LLM Engine if available
 try:
-    from llm_engine import LLMEngine
+    from llm_engine import LLMEngine, InferenceConfig
     LLM_ENGINE_AVAILABLE = True
 except ImportError:
     LLM_ENGINE_AVAILABLE = False
     LLMEngine = None
+    InferenceConfig = None
 
 
 @dataclass
@@ -38,12 +39,14 @@ class BenchmarkConfig:
     pass_threshold: float = 0.85
     output_dir: str = "benchmarks"
     # LLM Engine settings
-    teacher_engine_type: str = "mock"  # "mock", "llama_cpp", "ollama"
+    teacher_engine_type: str = "llama_cpp"  # "llama_cpp", "ollama", "mock"
     teacher_model_path: str = ""
     teacher_api_url: str = "http://localhost:11434"
-    student_engine_type: str = "mock"
+    teacher_model_name: str = "llama3"
+    student_engine_type: str = "llama_cpp"
     student_model_path: str = ""
     student_api_url: str = "http://localhost:11434"
+    student_model_name: str = "llama3"
     inference_params: Dict[str, Any] = field(default_factory=lambda: {
         "max_tokens": 512,
         "temperature": 0.7,
@@ -220,7 +223,13 @@ class BenchmarkRunner:
 
         if self.teacher_engine:
             try:
-                return self.teacher_engine.generate(question, **config.inference_params)
+                result = self.teacher_engine.generate(
+                    question,
+                    max_tokens=config.inference_params.get("max_tokens", 512),
+                    temperature=config.inference_params.get("temperature", 0.7),
+                    top_p=config.inference_params.get("top_p", 0.9),
+                )
+                return result.text if result.success else f"[Error] Teacher: {result.error}"
             except Exception as e:
                 return f"[Error] Teacher inference failed: {str(e)}"
 
@@ -234,7 +243,13 @@ class BenchmarkRunner:
 
         if self.student_engine:
             try:
-                return self.student_engine.generate(question, **config.inference_params)
+                result = self.student_engine.generate(
+                    question,
+                    max_tokens=config.inference_params.get("max_tokens", 512),
+                    temperature=config.inference_params.get("temperature", 0.7),
+                    top_p=config.inference_params.get("top_p", 0.9),
+                )
+                return result.text if result.success else f"[Error] Student: {result.error}"
             except Exception as e:
                 return f"[Error] Student inference failed: {str(e)}"
 
@@ -256,6 +271,42 @@ class BenchmarkRunner:
         """
         config = config or BenchmarkConfig()
         config.output_dir = os.path.abspath(config.output_dir)
+
+        # Create LLM Engines if models specified
+        teacher_engine = None
+        student_engine = None
+
+        if LLM_ENGINE_AVAILABLE and InferenceConfig:
+            # Create Teacher engine
+            if config.teacher_model_path and os.path.exists(config.teacher_model_path):
+                try:
+                    teacher_engine = LLMEngine.from_gguf(
+                        model_path=config.teacher_model_path,
+                        config=InferenceConfig(
+                            max_tokens=config.inference_params.get("max_tokens", 512),
+                            temperature=config.inference_params.get("temperature", 0.7),
+                            top_p=config.inference_params.get("top_p", 0.9),
+                        ),
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to load Teacher model: {str(e)}")
+
+            # Create Student engine
+            if config.student_model_path and os.path.exists(config.student_model_path):
+                try:
+                    student_engine = LLMEngine.from_gguf(
+                        model_path=config.student_model_path,
+                        config=InferenceConfig(
+                            max_tokens=config.inference_params.get("max_tokens", 512),
+                            temperature=config.inference_params.get("temperature", 0.7),
+                            top_p=config.inference_params.get("top_p", 0.9),
+                        ),
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to load Student model: {str(e)}")
+
+        self.teacher_engine = self.teacher_engine or teacher_engine
+        self.student_engine = self.student_engine or student_engine
 
         # 1. Generate or load test cases
         if dataset_path and os.path.exists(dataset_path):

@@ -602,6 +602,15 @@ class BenchmarkCompareRequest(BaseModel):
     question: str = ""
     test_id: str = ""
 
+class LLMStatusResponse(BaseModel):
+    llama_cpp_available: bool = False
+    llama_cpp_version: str = ""
+    model_loaded: bool = False
+    model_path: str = ""
+    model_size_gb: float = 0.0
+    ollama_available: bool = False
+    backend_status: str = ""
+
 class BenchmarkCompareResponse(BaseModel):
     passed: bool = False
     overall_score: float = 0.0
@@ -620,6 +629,46 @@ class BenchmarkFineTuneResponse(BaseModel):
     final_similarity: float = 0.0
     history_path: str = ""
     error_message: str = ""
+
+@app.get("/api/llm/status", response_model=LLMStatusResponse)
+async def get_llm_status():
+    """Проверить статус LLM Engine и доступных моделей"""
+    try:
+        from llm_engine import LLAMA_CPP_AVAILABLE, REQUESTS_AVAILABLE, LlamaCppEngine, OllamaEngine
+        import os
+        
+        llama_cpp_available = LLAMA_CPP_AVAILABLE
+        ollama_available = REQUESTS_AVAILABLE
+        
+        # Check teacher models
+        teacher_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "NeuroConstructor.Core", "models", "teacher"
+        )
+        
+        model_files = []
+        if os.path.exists(teacher_dir):
+            for f in os.listdir(teacher_dir):
+                if f.endswith('.gguf'):
+                    fpath = os.path.join(teacher_dir, f)
+                    model_files.append({
+                        "filename": f,
+                        "size_gb": round(os.path.getsize(fpath) / (1024**3), 2),
+                        "path": fpath
+                    })
+        
+        return LLMStatusResponse(
+            llama_cpp_available=llama_cpp_available,
+            model_loaded=len(model_files) > 0,
+            backend_status="ready" if llama_cpp_available else "llama-cpp not installed",
+            model_path=model_files[0]["path"] if model_files else "",
+            model_size_gb=model_files[0]["size_gb"] if model_files else 0,
+            ollama_available=ollama_available,
+        )
+    except Exception as e:
+        return LLMStatusResponse(
+            backend_status=f"error: {str(e)}"
+        )
 
 @app.post("/api/benchmark/run", response_model=BenchmarkRunResponse)
 async def run_benchmark(request: BenchmarkRunRequest):
