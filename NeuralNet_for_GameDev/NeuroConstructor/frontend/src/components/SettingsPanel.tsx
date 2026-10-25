@@ -1082,9 +1082,60 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
     }
   };
 
+  // Обработчики выгрузки модели
+  const handleUnloadTeacher = async () => {
+    setLoadingModel('teacher');
+    try {
+      const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiUrl}/api/models/unload/teacher`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setLoadProgress({ active: true, progress: 50, message: 'Выгрузка модели Teacher...', model: null });
+        // Ждём немного и обновляем статус
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setLoadProgress({ active: false, progress: 100, message: '✅ Модель Teacher выгружена!', model: null });
+        fetchStatus();
+      } else {
+        alert(data.message || data.error || 'Ошибка выгрузки Teacher');
+      }
+    } catch (err) {
+      console.error('Unload teacher error:', err);
+      alert('Не удалось выгрузить Teacher');
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
+  const handleUnloadStudent = async () => {
+    setLoadingModel('student');
+    try {
+      const apiUrl = settings.serverUrl || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiUrl}/api/models/unload/student`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setLoadProgress({ active: true, progress: 50, message: 'Выгрузка модели Student...', model: null });
+        // Ждём немного и обновляем статус
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setLoadProgress({ active: false, progress: 100, message: '✅ Модель Student выгружена!', model: null });
+        fetchStatus();
+      } else {
+        alert(data.message || data.error || 'Ошибка выгрузки Student');
+      }
+    } catch (err) {
+      console.error('Unload student error:', err);
+      alert('Не удалось выгрузить Student');
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
   // Progress Bar Component
   const ProgressBar = () => {
+    // Скрываем прогресс-бар если:
+    // - Загрузка не активна И прогресс не 100%
+    // - Или прогресс 100% и загрузка не активна (модель загружена)
     if (!loadProgress.active && loadProgress.progress !== 100) return null;
+    if (loadProgress.progress === 100 && !loadProgress.active) return null;
 
     const isComplete = loadProgress.progress === 100;
 
@@ -1197,11 +1248,11 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                       path={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
                     />
                     <button
-                      onClick={handleLoadTeacher}
+                      onClick={engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? handleUnloadTeacher : handleLoadTeacher}
                       disabled={loadingModel !== null || loadProgress.active}
                       style={{
                         padding: '8px 16px',
-                        background: engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '#4caf50' : '#7c6ff7',
+                        background: engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '#f44336' : '#7c6ff7',
                         border: 'none',
                         borderRadius: 6,
                         color: 'white',
@@ -1212,7 +1263,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                         opacity: loadingModel !== null || loadProgress.active ? 0.5 : 1,
                       }}
                     >
-                      {loadingModel === 'teacher' ? '⏳...' : engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '✅' : '📥 Загрузить'}
+                      {loadingModel === 'teacher' ? '⏳...' : (engineStatus.model_type === 'teacher' && engineStatus.model_loaded ? '📤 Выгрузить' : '📥 Загрузить')}
                     </button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1223,11 +1274,11 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                       path={engineStatus.model_type === 'student' && engineStatus.model_loaded ? engineStatus.model_path : undefined}
                     />
                     <button
-                      onClick={handleLoadStudent}
+                      onClick={engineStatus.model_type === 'student' && engineStatus.model_loaded ? handleUnloadStudent : handleLoadStudent}
                       disabled={loadingModel !== null || loadProgress.active}
                       style={{
                         padding: '8px 16px',
-                        background: engineStatus.model_type === 'student' && engineStatus.model_loaded ? '#4caf50' : '#7c6ff7',
+                        background: engineStatus.model_type === 'student' && engineStatus.model_loaded ? '#f44336' : '#7c6ff7',
                         border: 'none',
                         borderRadius: 6,
                         color: 'white',
@@ -1238,7 +1289,7 @@ function EngineTab({ settings, setSettings }: { settings: AppSettings; setSettin
                         opacity: loadingModel !== null || loadProgress.active ? 0.5 : 1,
                       }}
                     >
-                      {loadingModel === 'student' ? '⏳...' : engineStatus.model_type === 'student' && engineStatus.model_loaded ? '✅' : '📥 Загрузить'}
+                      {loadingModel === 'student' ? '⏳...' : (engineStatus.model_type === 'student' && engineStatus.model_loaded ? '📤 Выгрузить' : '📥 Загрузить')}
                     </button>
                   </div>
                 </div>

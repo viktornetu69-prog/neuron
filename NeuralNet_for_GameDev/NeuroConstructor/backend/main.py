@@ -1480,6 +1480,58 @@ async def delete_plugin(plugin_name: str):
 # Dataset Viewer endpoint
 # ============================================
 
+# ============================================
+# Model Unload endpoint
+# ============================================
+
+class ModelUnloadResponse(BaseModel):
+    success: bool = False
+    message: str = ""
+    error: str = ""
+
+@app.post("/api/models/unload/{model_type}", response_model=ModelUnloadResponse)
+async def unload_model(model_type: str):
+    """Выгрузить модель из памяти (teacher или student)"""
+    try:
+        model_type_lower = model_type.lower()
+        
+        if model_type_lower not in ['teacher', 'student']:
+            return ModelUnloadResponse(
+                success=False,
+                error=f"Неверный тип модели: {model_type}. Допустимые значения: teacher, student"
+            )
+        
+        # Проверяем, что модель загружена
+        if not server_state.get("engine"):
+            return ModelUnloadResponse(
+                success=False,
+                message=f"Модель {model_type_lower} не загружена"
+            )
+        
+        # Проверяем, что это та модель, которую мы выгружаем
+        current_type = server_state.get("model_info", {}).get("model_type", "")
+        if current_type != model_type_lower:
+            return ModelUnloadResponse(
+                success=False,
+                message=f"Загружена модель {current_type}, а не {model_type_lower}"
+            )
+        
+        # Выгружаем модель
+        server_state["engine"] = None
+        server_state["model_loaded"] = False
+        server_state["model_path"] = ""
+        server_state["model_info"] = {}
+        
+        logger.info(f"Model {model_type_lower} unloaded successfully")
+        return ModelUnloadResponse(
+            success=True,
+            message=f"Модель {model_type_lower} успешно выгружена"
+        )
+    except Exception as e:
+        logger.error(f"Unload model error: {e}", exc_info=True)
+        return ModelUnloadResponse(success=False, error=str(e))
+
+
 class DatasetViewRequest(BaseModel):
     dataset_id: str
     limit: int = 50
