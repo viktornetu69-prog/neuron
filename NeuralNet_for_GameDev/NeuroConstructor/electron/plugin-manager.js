@@ -1,14 +1,14 @@
 /**
- * Plugin Manager - Управление плагинами с hot-reload
+ * Plugin Manager v2 — Управление плагинами с hot-reload
+ * Интеграция с новой плагинной системой (plugin_registry.py)
  * 
  * Плагин может быть:
- * 1. Python файл (.py) в директории backend/plugins/
- * 2. JavaScript модуль (для будущего расширения)
+ * 1. Python файл (.py) в директории plugins/builtin/ или plugins/custom/
+ * 2. Управляется через backend plugin registry
  * 
  * Hot-reload работает через:
  * - FS Watch для отслеживания изменений
- * - importlib.reload() для Python модулей
- * - IPC событие для обновления React UI
+ * - IPC события для обновления React UI
  */
 
 const fs = require('fs');
@@ -18,14 +18,21 @@ const { spawn } = require('child_process');
 class PluginManager {
   constructor() {
     this.plugins = new Map();
-    this.pluginDir = path.join(__dirname, '..', 'backend', 'plugins');
+    
+    // Директория встроенных плагинов
+    this.builtinDir = path.join(__dirname, '..', 'plugins', 'builtin');
+    // Директория пользовательских плагинов
+    this.customDir = path.join(__dirname, '..', 'plugins', 'custom');
+    
     this.watcher = null;
     this.isInitialized = false;
-    
-    // Создаём директорию плагинов если нет
-    if (!fs.existsSync(this.pluginDir)) {
-      fs.mkdirSync(this.pluginDir, { recursive: true });
-    }
+
+    // Создаём директории если нет
+    [this.builtinDir, this.customDir].forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
   }
 
   /**
@@ -34,14 +41,17 @@ class PluginManager {
   async initialize() {
     if (this.isInitialized) return;
 
-    // Загружаем существующие плагины
-    await this.scanPlugins();
+    // Сканируем оба каталога
+    await this.scanPlugins(this.builtinDir, true);
+    await this.scanPlugins(this.customDir, false);
 
     // Запускаем FS Watch для hot-reload
     this.startWatcher();
     this.isInitialized = true;
-    
-    console.log('PluginManager initialized');
+
+    console.log('PluginManager v2 initialized');
+    console.log(`  Builtin plugins: ${this.builtinDir}`);
+    console.log(`  Custom plugins: ${this.customDir}`);
   }
 
   /**
@@ -52,10 +62,12 @@ class PluginManager {
       this.watcher.close();
     }
 
-    this.watcher = fs.watch(this.pluginDir, { recursive: true }, (eventType, filename) => {
-      if (filename && filename.endsWith('.py')) {
+    // Смотрим за custom plugins (builtin меняются редко)
+    this.watcher = fs.watch(this.customDir, { recursive: true }, (eventType, filename) => {
+      if (filename && filename.endsWith('.py') && !filename.startsWith('_')) {
+        const pluginName = filename.replace('.py', '');
         console.log(`Plugin file changed: ${filename}`);
-        this.reloadPluginByName(filename.replace('.py', ''));
+        this.reloadPluginByName(pluginName);
       }
     });
   }
@@ -63,29 +75,26 @@ class PluginManager {
   /**
    * Сканирование директории и загрузка плагинов
    */
-  async scanPlugins() {
+  async scanPlugins(directory, isBuiltin) {
     try {
-      const files = fs.readdirSync(this.pluginDir);
-      const pyFiles = files.filter(f => f.endsWith('.py') && !f.startsWith('__'));
+      const files = fs.readdirSync(directory);
+      const pyFiles = files.filter(f => f.endsWith('.py') && !f.startsWith('__') && !f.startsWith('.'));
 
       for (const file of pyFiles) {
         const pluginName = file.replace('.py', '');
-        const pluginPath = path.join(this.pluginDir, file);
-        await this.loadPlugin(pluginPath, pluginName);
+        const pluginPath = path.join(directory, file);
+        await this.loadPlugin(pluginPath, pluginName, isBuiltin);
       }
     } catch (error) {
-      console.error('Error scanning plugins:', error);
+      console.error(`Error scanning ${directory}:`, error);
     }
   }
 
   /**
    * Загрузка плагина через Python subprocess
-   * @param {string} pluginPath - Путь к файлу плагина
-   * @param {string} pluginName - Имя плагина
    */
-  async loadPlugin(pluginPath, pluginName) {
+  async loadPlugin(pluginPath, pluginName, isBuiltin = false) {
     try {
-      // Создаём Python скрипт для загрузки плагина
       const loaderScript = `
 import sys
 import importlib.util
@@ -97,14 +106,21 @@ module = importlib.util.module_from_spec(spec)
 sys.modules["${pluginName}"] = module
 spec.loader.exec_module(module)
 
-# Получаем metadata плагина
+# Извлекаем метаданные плагина
 metadata = {
+    "id": getattr(module, "PLUGIN_ID", "${pluginName}"),
     "name": getattr(module, "PLUGIN_NAME", "${pluginName}"),
     "version": getattr(module, "PLUGIN_VERSION", "1.0.0"),
     "description": getattr(module, "PLUGIN_DESCRIPTION", ""),
-    "type": getattr(module, "PLUGIN_TYPE", "default"),
+    "category": getattr(module, "PLUGIN_CATEGORY", "utility"),
     "has_ui": getattr(module, "HAS_UI_COMPONENT", False),
+    "ui_position": getattr(module, "UI_POSITION", "main_panel"),
+    "sidebar_icon": getattr(module, "SIDEBAR_ICON", "🔌"),
+    "sidebar_label": getattr(module, "SIDEBAR_LABEL", getattr(module, "PLUGIN_NAME", "${pluginName}")),
+    "is_builtin": ${isBuiltin},
+    "enabled_by_default": getattr(module, "ENABLED_BY_DEFAULT", True),
     "capabilities": getattr(module, "CAPABILITIES", []),
+    "dependencies": getattr(module, "DEPENDENCIES", "[]"),
 }
 
 print(json.dumps(metadata))
@@ -113,36 +129,40 @@ print(json.dumps(metadata))
       const pythonPath = process.env.PYTHON_PATH || 'python';
       const child = spawn(pythonPath, ['-c', loaderScript], {
         timeout: 5000,
+        cwd: path.join(__dirname, '..', 'core'),
       });
 
       let stdout = '';
       let stderr = '';
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+      child.stdout.on('data', (data) => { stdout += data.toString(); });
+      child.stderr.on('data', (data) => { stderr += data.toString(); });
 
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
         child.on('close', (code) => {
           if (code === 0 && stdout) {
             try {
               const metadata = JSON.parse(stdout.trim());
-              this.plugins.set(pluginName, {
+              const pluginId = metadata.id || pluginName;
+              
+              this.plugins.set(pluginId, {
                 path: pluginPath,
+                id: pluginId,
                 name: metadata.name,
                 version: metadata.version,
                 description: metadata.description,
-                type: metadata.type,
+                category: metadata.category,
                 hasUI: metadata.has_ui,
+                uiPosition: metadata.ui_position,
+                sidebarIcon: metadata.sidebar_icon,
+                sidebarLabel: metadata.sidebar_label,
+                isBuiltin: metadata.is_builtin,
+                enabledByDefault: metadata.enabled_by_default,
                 capabilities: metadata.capabilities,
-                module: null, // Не сохраняем в Node.js
+                dependencies: metadata.dependencies,
                 lastModified: fs.statSync(pluginPath).mtime,
               });
-              console.log(`✅ Plugin loaded: ${metadata.name}`);
+              console.log(`✅ Plugin loaded: ${metadata.name} (builtin: ${metadata.is_builtin})`);
               resolve(metadata);
             } catch (e) {
               console.error('Error parsing plugin metadata:', e);
@@ -166,26 +186,90 @@ print(json.dumps(metadata))
   }
 
   /**
-   * Ручная регистрация плагина (из React)
+   * Получение списка всех плагинов
    */
-  async registerPlugin(pluginData) {
+  getPlugins() {
+    const result = [];
+    for (const [id, plugin] of this.plugins.entries()) {
+      result.push({
+        id: plugin.id,
+        name: plugin.name,
+        version: plugin.version,
+        description: plugin.description,
+        category: plugin.category,
+        capabilities: plugin.capabilities,
+        has_ui: plugin.hasUI,
+        ui_position: plugin.uiPosition,
+        sidebar_icon: plugin.sidebarIcon,
+        sidebar_label: plugin.sidebarLabel,
+        is_builtin: plugin.isBuiltin,
+        enabled: plugin.enabledByDefault,
+        file_path: plugin.path,
+        dependencies: plugin.dependencies,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Переключение состояния плагина (вкл/выкл)
+   * Реальная логика выполняется через Python backend
+   */
+  async togglePlugin(pluginId) {
+    return {
+      success: true,
+      message: `Plugin ${pluginId} toggled (state managed by backend)`,
+      pluginId,
+    };
+  }
+
+  /**
+   * Перезагрузка плагина
+   */
+  async reloadPluginByName(pluginId) {
+    const plugin = this.plugins.get(pluginId);
+    if (!plugin) return;
+
+    // Проверяем, изменился ли файл
     try {
-      // Создаём Python файл плагина
+      const newModified = fs.statSync(plugin.path).mtime;
+      if (newModified.getTime() === plugin.lastModified.getTime()) return;
+    } catch (e) {
+      return;
+    }
+
+    // Перезагружаем
+    this.plugins.delete(pluginId);
+    await this.loadPlugin(plugin.path, pluginId, plugin.isBuiltin);
+    this.notifyUI();
+  }
+
+  /**
+   * Уведомление UI об обновлении
+   */
+  notifyUI() {
+    // Отправляем событие через IPC
+    if (typeof ipcRenderer !== 'undefined') {
+      ipcRenderer.send('plugin-list-updated');
+    }
+    console.log('Plugin list updated');
+  }
+
+  /**
+   * Создание пользовательского плагина
+   */
+  async createPlugin(pluginData) {
+    try {
       const pluginCode = this.generatePluginCode(pluginData);
-      const pluginPath = path.join(this.pluginDir, `${pluginData.id}.py`);
-      
+      const pluginPath = path.join(this.customDir, `${pluginData.id}.py`);
+
       fs.writeFileSync(pluginPath, pluginCode);
-      
+
       // Загружаем плагин
-      const metadata = await this.loadPlugin(pluginPath, pluginData.id);
-      
-      if (metadata) {
-        // Отправляем событие обновления UI
-        this.notifyUI();
-        return { success: true, metadata };
-      }
-      
-      return { success: false, error: 'Failed to load plugin' };
+      await this.loadPlugin(pluginPath, pluginData.id, false);
+      this.notifyUI();
+
+      return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -195,72 +279,57 @@ print(json.dumps(metadata))
    * Генерация кода Python плагина
    */
   generatePluginCode(pluginData) {
-    return `
-"""
-${pluginData.description || 'Auto-generated plugin'}
+    return `"""
+${pluginData.description || 'Custom plugin'}
 """
 
+PLUGIN_ID = "${pluginData.id}"
 PLUGIN_NAME = "${pluginData.name || pluginData.id}"
 PLUGIN_VERSION = "${pluginData.version || '1.0.0'}"
 PLUGIN_DESCRIPTION = "${pluginData.description || ''}"
-PLUGIN_TYPE = "${pluginData.type || 'default'}"
+PLUGIN_CATEGORY = "${pluginData.category || 'utility'}"
 HAS_UI_COMPONENT = ${pluginData.hasUI ? 'True' : 'False'}
+UI_POSITION = "${pluginData.uiPosition || 'main_panel'}"
+SIDEBAR_ICON = "${pluginData.sidebarIcon || '🔌'}"
+SIDEBAR_LABEL = "${pluginData.sidebarLabel || pluginData.name}"
+ENABLED_BY_DEFAULT = ${pluginData.enabled !== false}
+IS_BUILTIN = False
 CAPABILITIES = ${JSON.stringify(pluginData.capabilities || [])}
+DEPENDENCIES = ${JSON.stringify(pluginData.dependencies || [])}
+
 
 class ${pluginData.id.charAt(0).toUpperCase() + pluginData.id.slice(1)}Plugin:
-    """Plugin implementation"""
-    
+    """Custom plugin implementation"""
+
     def __init__(self):
         self.enabled = True
         self.config = {}
-    
-    def execute(self, data):
-        """Main execution method"""
-        # TODO: Implement plugin logic
-        return {
-            "status": "ok",
-            "message": f"Plugin {PLUGIN_NAME} executed",
-            "data": data
-        }
 
-def get_plugin_info():
-    """Return plugin metadata"""
-    return {{
-        "name": PLUGIN_NAME,
-        "version": PLUGIN_VERSION,
-        "description": PLUGIN_DESCRIPTION,
-        "type": PLUGIN_TYPE,
-        "capabilities": CAPABILITIES
-    }}
+    def on_enable(self):
+        return {"success": True}
 
-# Auto-instantiate
+    def on_disable(self):
+        pass
+
+    def get_ui_config(self):
+        return {"status": "ok", "plugin_id": "${pluginData.id}"}
+
+    def execute(self, context):
+        method = context.config.get('method', 'get_ui_config')
+        args = context.config.get('args', {})
+        return {"success": True, "method": method, "args": args}
+
+
+# Global instance
 instance = ${pluginData.id.charAt(0).toUpperCase() + pluginData.id.slice(1)}Plugin()
 `;
   }
 
   /**
-   * Перезагрузка плагина
-   */
-  async reloadPlugin(pluginPath) {
-    const pluginName = path.basename(pluginPath, '.py');
-    return await this.reloadPluginByName(pluginName);
-  }
-
-  async reloadPluginByName(pluginName) {
-    const pluginPath = path.join(this.pluginDir, `${pluginName}.py`);
-    if (!fs.existsSync(pluginPath)) return;
-
-    const metadata = await this.loadPlugin(pluginPath, pluginName);
-    if (metadata) {
-      this.notifyUI();
-    }
-  }
-
-  /**
-   * Удаление плагина
+   * Удаление пользовательского плагина
    */
   async removePlugin(pluginId) {
-    const pluginPath = path.join(this.pluginDir, `${pluginId}.py`);
+    const pluginPath = path.join(this.customDir, `${pluginId}.py`);
     if (fs.existsSync(pluginPath)) {
       fs.unlinkSync(pluginPath);
       this.plugins.delete(pluginId);
@@ -268,21 +337,6 @@ instance = ${pluginData.id.charAt(0).toUpperCase() + pluginData.id.slice(1)}Plug
       return { success: true };
     }
     return { success: false, error: 'Plugin not found' };
-  }
-
-  /**
-   * Получение списка плагинов
-   */
-  getPlugins() {
-    return Array.from(this.plugins.values());
-  }
-
-  /**
-   * Уведомление UI об обновлении
-   */
-  notifyUI() {
-    // В реальном приложении здесь будет отправка события через IPC
-    console.log('Plugin list updated');
   }
 }
 

@@ -49,22 +49,12 @@ export function PreviewPanel({ isOpen, onClose, serverRunning, onToggleServer, t
   const [showConfig, setShowConfig] = useState(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('server');
   const outputRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [config.output]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-    };
-  }, []);
 
   const addLog = (msg: string) => {
     setConfig(prev => ({
@@ -83,72 +73,36 @@ export function PreviewPanel({ isOpen, onClose, serverRunning, onToggleServer, t
     }));
 
     try {
-      abortRef.current = new AbortController();
-
-      // Определяем рабочую директорию
-      const targetCwd = config.cwd || process.cwd();
-
-      addLog(`📂 CWD: ${targetCwd}`);
-
-      // Запускаем subprocess
-      const { spawn } = await import('child_process');
-      const [cmd, ...args] = config.command.split(' ');
-
-      addLog(`⚙️  Команда: ${cmd} ${args.join(' ')}`);
-
-      const child = spawn(cmd, args, {
-        cwd: targetCwd,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
+      const response = await fetch('http://127.0.0.1:8000/api/preview/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: config.command,
+          cwd: config.cwd || undefined,
+          name: 'preview',
+        }),
       });
 
-      let outputBuffer = '';
+      const data = await response.json();
 
-      child.stdout.on('data', (data: Buffer) => {
-        const text = data.toString();
-        outputBuffer += text;
-        addLog(text.trim());
-
-        // Проверяем, запущен ли сервер
-        if (text.toLowerCase().includes('ready') ||
-            text.toLowerCase().includes('localhost') ||
-            text.toLowerCase().includes('http://')) {
-          addLog('✅ Сервер готов!');
-          setConfig(prev => ({
-            ...prev,
-            status: 'running',
-            pid: child.pid,
-          }));
-          setIframeSrc(`http://127.0.0.1:${config.port}`);
-          onToggleServer();
-        }
-      });
-
-      child.stderr.on('data', (data: Buffer) => {
-        addLog(`❌ ${data.toString().trim()}`);
-      });
-
-      child.on('error', (err) => {
-        addLog(`⚠️  Ошибка запуска: ${err.message}`);
+      if (data.success) {
+        addLog(`✅ Сервер запущен (PID: ${data.pid})`);
+        setConfig(prev => ({
+          ...prev,
+          status: 'running',
+          pid: data.pid,
+        }));
+        setIframeSrc(`http://127.0.0.1:${config.port}`);
+        onToggleServer();
+      } else {
+        addLog(`❌ Ошибка: ${data.message || data.error}`);
         setConfig(prev => ({
           ...prev,
           status: 'error',
         }));
-      });
-
-      child.on('exit', (code) => {
-        addLog(`🛑 Процесс завершил работу с кодом ${code}`);
-        setConfig(prev => ({
-          ...prev,
-          status: 'idle',
-          pid: undefined,
-        }));
-        setIframeSrc('');
-        onToggleServer();
-      });
-
+      }
     } catch (error: any) {
-      addLog(`❌ Ошибка: ${error.message}`);
+      addLog(`❌ Ошибка подключения: ${error.message}`);
       setConfig(prev => ({
         ...prev,
         status: 'error',
@@ -159,19 +113,22 @@ export function PreviewPanel({ isOpen, onClose, serverRunning, onToggleServer, t
   const handleStopServer = async () => {
     addLog('🛑 Остановка сервера...');
 
-    if (config.pid) {
-      try {
-        // Windows: taskkill
-        const { execSync } = await import('child_process');
-        execSync(`taskkill /PID ${config.pid} /F`, { stdio: 'pipe' });
-        addLog(`✅ Процесс ${config.pid} остановлен`);
-      } catch (err: any) {
-        addLog(`⚠️  Не удалось остановить процесс: ${err.message}`);
-      }
-    }
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/preview/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'preview' }),
+      });
 
-    if (abortRef.current) {
-      abortRef.current.abort();
+      const data = await response.json();
+
+      if (data.success) {
+        addLog('✅ Сервер остановлен');
+      } else {
+        addLog(`⚠️ ${data.message}`);
+      }
+    } catch (error: any) {
+      addLog(`⚠️ Ошибка остановки: ${error.message}`);
     }
 
     setConfig(prev => ({
@@ -190,9 +147,6 @@ export function PreviewPanel({ isOpen, onClose, serverRunning, onToggleServer, t
       output: [],
     }));
   };
-
-  // Detect if frontend exists
-  const frontendExists = false; // Will be set dynamically
 
   if (!isOpen) return null;
 

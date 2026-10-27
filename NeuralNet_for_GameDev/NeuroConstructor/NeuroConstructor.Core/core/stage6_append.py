@@ -97,4 +97,5 @@ methods_text = '''
 content = content.rstrip('\r\n') + '\r\n' + methods_text.replace('\n', '\r\n')
 with open(p, 'w', encoding='utf-8', newline='') as f:
     f.write(content)
-print('OK')
+import logging
+logging.getLogger(__name__).info('Stage 6 append completed successfully')

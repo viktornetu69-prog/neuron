@@ -448,13 +448,39 @@ class DataAugmentor:
 
     @staticmethod
     def _aug_synonym_replace(text: str, row: Dict = None) -> str:
-        """Simple synonym replacement (uses word reversal as placeholder)."""
+        """Simple synonym replacement with basic synonym dictionary."""
+        # Basic synonym dictionary (extended in production)
+        synonyms = {
+            "good": ["great", "excellent", "fine", "nice"],
+            "bad": ["poor", "terrible", "awful", "negative"],
+            "big": ["large", "huge", "enormous", "vast"],
+            "small": ["tiny", "little", "compact", "minor"],
+            "fast": ["quick", "rapid", "swift", "speedy"],
+            "slow": ["sluggish", "lazy", "unhurried", "delayed"],
+            "happy": ["joyful", "pleased", "content", "delighted"],
+            "sad": ["unhappy", "sorrowful", "melancholy", "down"],
+            "important": ["crucial", "essential", "vital", "key"],
+            "easy": ["simple", "straightforward", "effortless", "basic"],
+            "difficult": ["hard", "challenging", "complex", "tough"],
+            "new": ["fresh", "recent", "modern", "latest"],
+            "old": ["ancient", "aged", "mature", "vintage"],
+            "beautiful": ["lovely", "attractive", "stunning", "gorgeous"],
+            "ugly": ["unattractive", "unsightly", "hideous", "plain"],
+        }
+        
         words = text.split()
         new_words = []
         for word in words:
-            if random.random() < 0.1 and len(word) > 3:
-                # Placeholder: reverse the word (in production, use WordNet)
-                new_words.append(word[::-1])
+            if random.random() < 0.15 and len(word) > 3:
+                lower_word = word.lower()
+                if lower_word in synonyms:
+                    replacement = random.choice(synonyms[lower_word])
+                    # Preserve capitalization
+                    if word[0].isupper():
+                        replacement = replacement.capitalize()
+                    new_words.append(replacement)
+                else:
+                    new_words.append(word)
             else:
                 new_words.append(word)
         return " ".join(new_words)
@@ -462,16 +488,33 @@ class DataAugmentor:
     @staticmethod
     def _aug_back_translation(text: str, row: Dict = None) -> str:
         """
-        Back-translation placeholder.
+        Enhanced back-translation simulation.
         In production: EN → DE → EN using translation model.
-        Here: adds small noise.
+        Here: applies realistic text transformations.
         """
-        # Placeholder: capitalize randomly
         words = text.split()
-        new_words = [
-            w.upper() if random.random() < 0.1 else w
-            for w in words
-        ]
+        if len(words) <= 2:
+            return text
+        
+        new_words = []
+        for i, word in enumerate(words):
+            rand_val = random.random()
+            
+            if rand_val < 0.05 and len(word) > 4:
+                # 5% chance to insert filler word
+                fillers = ["quite", "very", "really", "pretty", "rather"]
+                new_words.append(random.choice(fillers))
+                new_words.append(word)
+            elif rand_val < 0.1 and word[0].islower():
+                # 5% chance to change case for variation
+                new_words.append(word.upper())
+            elif rand_val < 0.15 and i > 0 and i < len(words) - 1:
+                # 5% chance to swap adjacent words
+                words[i], words[i+1] = words[i+1], words[i]
+                new_words.append(words[i])
+            else:
+                new_words.append(word)
+        
         return " ".join(new_words)
 
 

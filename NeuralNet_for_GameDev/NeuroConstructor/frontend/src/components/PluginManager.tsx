@@ -1,508 +1,241 @@
-import React, { useState, useEffect } from 'react';
-
-interface Plugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  type: string;
-  capabilities: string[];
-  file_path?: string;
-  file_size?: number;
-  created_at?: string;
-}
+/**
+ * PluginManager с toggle вкл/выкл и настройками плагина
+ */
+import React, { useState, useEffect, useCallback } from 'react';
+import { getAllPlugins, togglePlugin } from '@/api.client';
+import { Plugin } from '@/types';
 
 export function PluginManagerPanel() {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openCreateDialog, setOpenCreateDialog] = useState(false);
-  const [newPlugin, setNewPlugin] = useState({
-    name: '',
-    description: '',
-    type: 'default',
-    version: '1.0.0',
-    capabilities: '',
-  });
+  const [activePlugin, setActivePlugin] = useState<string | null>(null);
+  const [pluginConfig, setPluginConfig] = useState<any>(null);
+  const [filter, setFilter] = useState<string>('all');
 
-  const loadPlugins = async () => {
+  const loadPlugins = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Загружаем плагины из директории
-      const fs = await import('fs');
-      const path = await import('path');
-
-      const pluginsDir = path.join(__dirname, '..', 'plugins');
-      let pluginFiles: string[] = [];
-
-      try {
-        pluginFiles = fs.readdirSync(pluginsDir).filter(f => f.endsWith('.json'));
-      } catch {
-        // Директория может не существовать
-        pluginFiles = [];
-      }
-
-      const loadedPlugins: Plugin[] = [];
-      for (const file of pluginFiles) {
-        try {
-          const filePath = path.join(pluginsDir, file);
-          const content = fs.readFileSync(filePath, 'utf-8');
-          const pluginData = JSON.parse(content);
-          pluginData.id = file.replace('.json', '');
-          pluginData.file_path = filePath;
-          pluginData.file_size = fs.statSync(filePath).size;
-          loadedPlugins.push(pluginData);
-        } catch {
-          // Skip invalid files
-        }
-      }
-
+      const response = await getAllPlugins();
+      const loadedPlugins: Plugin[] = (response.plugins || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        version: p.version || '1.0.0',
+        description: p.description || '',
+        category: p.category,
+        capabilities: p.capabilities || [],
+        has_ui: p.has_ui,
+        ui_position: p.ui_position,
+        sidebar_icon: p.sidebar_icon,
+        sidebar_label: p.sidebar_label,
+        is_builtin: p.is_builtin,
+        enabled: p.enabled,
+        state: p.state,
+        file_path: p.file_path,
+        file_size: p.file_size,
+        created_at: p.created_at,
+        loaded_at: p.loaded_at,
+        error_message: p.error_message,
+        dependencies: p.dependencies,
+      }));
       setPlugins(loadedPlugins);
-      setError(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Failed to load plugins: ${msg}`);
+      const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
+      setError(`Не удалось загрузить плагины: ${msg}`);
+      setPlugins([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadPlugins();
-  }, []);
+    // Auto-refresh каждые 3 секунды
+    const interval = setInterval(loadPlugins, 3000);
+    return () => clearInterval(interval);
+  }, [loadPlugins]);
 
-  const handleCreatePlugin = async () => {
-    if (!newPlugin.name) {
-      setError('Name is required');
-      return;
-    }
-
+  const handleToggle = async (pluginId: string) => {
     try {
-      const pluginData: Partial<Plugin> = {
-        name: newPlugin.name,
-        description: newPlugin.description,
-        type: newPlugin.type,
-        version: newPlugin.version,
-        capabilities: newPlugin.capabilities
-          .split(',')
-          .map((c) => c.trim())
-          .filter(Boolean),
-      };
-
-      // Сохраняем плагин в JSON файл
-      const fs = await import('fs');
-      const path = await import('path');
-
-      const pluginsDir = path.join(__dirname, '..', 'plugins');
-      if (!fs.existsSync(pluginsDir)) {
-        fs.mkdirSync(pluginsDir, { recursive: true });
-      }
-
-      const filename = `${newPlugin.name.replace(' ', '_').toLowerCase()}_${newPlugin.version.replace('.', '_')}.json`;
-      const filePath = path.join(pluginsDir, filename);
-
-      pluginData.id = filename.replace('.json', '');
-      pluginData.created_at = new Date().toISOString();
-      pluginData.file_path = filePath;
-
-      fs.writeFileSync(filePath, JSON.stringify(pluginData, null, 2), 'utf-8');
-
-      // Обновляем список
-      setPlugins(prev => [...prev, pluginData as Plugin]);
-      setOpenCreateDialog(false);
-      setNewPlugin({
-        name: '',
-        description: '',
-        type: 'default',
-        version: '1.0.0',
-        capabilities: '',
-      });
+      await togglePlugin(pluginId);
+      // Перезагружаем
+      loadPlugins();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Failed to create plugin: ${msg}`);
+      const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
+      setError(`Не удалось переключить плагин: ${msg}`);
     }
   };
 
-  const handleDeletePlugin = async (pluginId: string) => {
+  const handlePluginClick = async (pluginId: string) => {
+    setActivePlugin(pluginId);
+    // Загружаем config плагина
     try {
-      const fs = await import('fs');
-      const path = await import('path');
-
-      const pluginsDir = path.join(__dirname, '..', 'plugins');
-      const files = fs.readdirSync(pluginsDir).filter(f => f.includes(pluginId));
-
-      for (const file of files) {
-        fs.unlinkSync(path.join(pluginsDir, file));
-      }
-
-      setPlugins(prev => prev.filter(p => p.id !== pluginId));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Failed to delete plugin: ${msg}`);
+      const { executePluginMethod } = await import('@/api.client');
+      const result = await executePluginMethod(pluginId, 'get_ui_config');
+      setPluginConfig(result);
+    } catch (error) {
+      console.error('Failed to load plugin config:', error);
+      setPluginConfig(null);
     }
   };
+
+  const filteredPlugins = plugins.filter(p => {
+    if (filter === 'all') return true;
+    if (filter === 'enabled') return p.state === 'enabled';
+    if (filter === 'disabled') return p.state !== 'enabled';
+    if (filter === 'builtin') return p.is_builtin;
+    return true;
+  });
+
+  const enabledCount = plugins.filter(p => p.state === 'enabled').length;
+  const totalCount = plugins.length;
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-      }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: '#e8e8e8', margin: 0 }}>
-          Plugin Manager
-        </h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={loadPlugins}
-            disabled={loading}
-            style={{
-              padding: '8px 16px',
-              background: '#1a1a2e',
-              border: '1px solid #2a2a3e',
-              borderRadius: 6,
-              color: '#8888aa',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: 12,
-            }}
-          >
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
-          <button
-            onClick={() => setOpenCreateDialog(true)}
-            style={{
-              padding: '8px 16px',
-              background: '#7c6ff7',
-              border: 'none',
-              borderRadius: 6,
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            Create Plugin
+    <div style={{ padding: 24, height: '100%', display: 'flex', gap: 24, overflow: 'hidden' }}>
+      {/* Left: Plugin List */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#e8e8e8', margin: 0 }}>🔌 Менеджер Плагинов</h2>
+            <p style={{ fontSize: 13, color: '#8888aa', margin: '4px 0 0' }}>
+              {enabledCount} из {totalCount} плагинов активно
+            </p>
+          </div>
+          <button onClick={loadPlugins} style={{
+            padding: '6px 12px', background: '#7c6ff7', border: 'none',
+            borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12,
+          }}>
+            ↻ Обновить
           </button>
         </div>
-      </div>
 
-      {error && (
-        <div style={{
-          padding: 12,
-          background: 'rgba(244, 67, 54, 0.1)',
-          border: '1px solid #f44336',
-          borderRadius: 6,
-          color: '#f44336',
-          marginBottom: 16,
-          fontSize: 13,
-        }}
-        >
-          {error}
-        </div>
-      )}
-
-      {plugins.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: 40,
-          color: '#8888aa',
-          fontSize: 14,
-        }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🔌</div>
-          <p>No plugins installed. Click "Create Plugin" to add your first plugin.</p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {plugins.map((plugin, index) => (
-            <div key={index} style={{
-              padding: 16,
-              background: '#121220',
-              border: '1px solid #1e1e30',
-              borderRadius: 8,
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {[
+            { id: 'all', label: 'Все', count: totalCount },
+            { id: 'enabled', label: 'Активные', count: enabledCount },
+            { id: 'disabled', label: 'Неактивные', count: totalCount - enabledCount },
+          ].map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              padding: '6px 12px',
+              background: filter === f.id ? '#7c6ff7' : '#1a1a2e',
+              border: `1px solid ${filter === f.id ? '#7c6ff7' : '#2a2a3e'}`,
+              borderRadius: 6,
+              color: filter === f.id ? 'white' : '#8888aa',
+              cursor: 'pointer', fontSize: 12,
             }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: 12,
+              {f.label} ({f.count})
+            </button>
+          ))}
+        </div>
+
+        {/* Plugin Cards */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {filteredPlugins.map((plugin) => (
+            <div key={plugin.id}
+              onClick={() => handlePluginClick(plugin.id)}
+              style={{
+                padding: 16,
+                background: activePlugin === plugin.id ? 'rgba(124, 111, 247, 0.1)' : '#121220',
+                border: `1px solid ${activePlugin === plugin.id ? '#7c6ff7' : '#1e1e30'}`,
+                borderRadius: 12,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
               }}>
-                <div>
-                  <h3 style={{
-                    fontSize: 16,
-                    fontWeight: 600,
-                    color: '#e8e8e8',
-                    margin: '0 0 4px 0',
-                  }}>
-                    {plugin.name}
-                  </h3>
-                  <p style={{
-                    fontSize: 13,
-                    color: '#8888aa',
-                    margin: 0,
-                  }}>
-                    {plugin.description || 'No description'}
-                  </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>{plugin.sidebar_icon}</span>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, color: '#e8e8e8', margin: 0 }}>{plugin.sidebar_label || plugin.name}</h3>
+                    <p style={{ fontSize: 12, color: '#8888aa', margin: '4px 0 0' }}>{plugin.description}</p>
+                  </div>
                 </div>
                 <button
-                  onClick={() => handleDeletePlugin(plugin.id)}
+                  onClick={(e) => { e.stopPropagation(); handleToggle(plugin.id); }}
                   style={{
-                    padding: '6px 12px',
-                    background: 'rgba(244, 67, 54, 0.1)',
-                    border: '1px solid #f44336',
-                    borderRadius: 6,
-                    color: '#f44336',
-                    cursor: 'pointer',
-                    fontSize: 11,
+                    width: 56, height: 28, borderRadius: 14, border: 'none',
+                    background: plugin.state === 'enabled' ? '#4caf50' : '#333344',
+                    cursor: 'pointer', position: 'relative',
                   }}
                 >
-                  Delete
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%', background: 'white',
+                    position: 'absolute', top: 3,
+                    left: plugin.state === 'enabled' ? 31 : 3,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                  }} />
                 </button>
               </div>
-              <div style={{
-                display: 'flex',
-                gap: 8,
-                flexWrap: 'wrap',
-              }}>
+
+              {/* Status and Info */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{
-                  padding: '4px 8px',
+                  padding: '4px 10px',
+                  background: plugin.state === 'enabled' ? 'rgba(76, 175, 80, 0.15)' :
+                    plugin.state === 'error' ? 'rgba(244, 67, 54, 0.15)' : 'rgba(136, 136, 170, 0.15)',
+                  borderRadius: 6, fontSize: 11,
+                  color: plugin.state === 'enabled' ? '#4caf50' :
+                    plugin.state === 'error' ? '#f44336' : '#8888aa',
+                }}>
+                  {plugin.state === 'enabled' ? '● Активен' :
+                   plugin.state === 'error' ? `✕ ${plugin.error_message || 'Ошибка'}` :
+                   plugin.state}
+                </span>
+                <span style={{
+                  padding: '4px 10px',
                   background: '#1a1a2e',
-                  borderRadius: 4,
-                  fontSize: 11,
-                  color: '#8888aa',
+                  borderRadius: 6, fontSize: 11, color: '#8888aa',
                 }}>
                   v{plugin.version}
                 </span>
                 <span style={{
-                  padding: '4px 8px',
-                  background: 'rgba(124, 111, 247, 0.2)',
-                  borderRadius: 4,
-                  fontSize: 11,
-                  color: '#7c6ff7',
+                  padding: '4px 10px',
+                  background: 'rgba(124, 111, 247, 0.15)',
+                  borderRadius: 6, fontSize: 11, color: '#7c6ff7',
                 }}>
-                  {plugin.type}
+                  {plugin.category.replace('_', ' ')}
                 </span>
-                {plugin.capabilities?.map((cap) => (
-                  <span key={cap} style={{
-                    padding: '4px 8px',
-                    background: '#1a1a2e',
-                    borderRadius: 4,
-                    fontSize: 11,
-                    color: '#8888aa',
-                  }}>
-                    {cap}
-                  </span>
-                ))}
               </div>
             </div>
           ))}
         </div>
-      )}
+      </div>
 
-      {/* Create Plugin Dialog */}
-      {openCreateDialog && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}
-          onClick={() => setOpenCreateDialog(false)}
-        >
-          <div style={{
-            background: '#121220',
-            borderRadius: 12,
-            padding: 24,
-            width: 500,
-            maxWidth: '90%',
-            border: '1px solid #1e1e30',
-          }}
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 style={{
-              fontSize: 16,
-              fontWeight: 600,
-              color: '#e8e8e8',
-              marginBottom: 16,
+      {/* Right: Plugin Details (shows when plugin selected) */}
+      {activePlugin && (
+        <div style={{ width: 400, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#e8e8e8', marginBottom: 16 }}>
+            {plugins.find(p => p.id === activePlugin)?.sidebar_icon} {plugins.find(p => p.id === activePlugin)?.sidebar_label || activePlugin}
+          </h3>
+
+          {pluginConfig ? (
+            <pre style={{
+              flex: 1, padding: 16, background: '#121220', borderRadius: 8,
+              border: '1px solid #1e1e30', fontSize: 12, color: '#8888aa',
+              overflow: 'auto',
             }}>
-              Create New Plugin
-            </h3>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-            }}>
-              <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: 12,
-                  color: '#8888aa',
-                  marginBottom: 4,
-                }}>Plugin Name</label>
-                <input
-                  type="text"
-                  value={newPlugin.name}
-                  onChange={e => setNewPlugin({ ...newPlugin, name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: '#1a1a2e',
-                    border: '1px solid #2a2a3e',
-                    borderRadius: 6,
-                    color: '#e8e8e8',
-                    fontSize: 13,
-                    outline: 'none',
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: 12,
-                  color: '#8888aa',
-                  marginBottom: 4,
-                }}>Description</label>
-                <textarea
-                  value={newPlugin.description}
-                  onChange={e => setNewPlugin({ ...newPlugin, description: e.target.value })}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: '#1a1a2e',
-                    border: '1px solid #2a2a3e',
-                    borderRadius: 6,
-                    color: '#e8e8e8',
-                    fontSize: 13,
-                    outline: 'none',
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 12,
-              }}>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: 12,
-                    color: '#8888aa',
-                    marginBottom: 4,
-                  }}>Type</label>
-                  <select
-                    value={newPlugin.type}
-                    onChange={e => setNewPlugin({ ...newPlugin, type: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      background: '#1a1a2e',
-                      border: '1px solid #2a2a3e',
-                      borderRadius: 6,
-                      color: '#e8e8e8',
-                      fontSize: 13,
-                      outline: 'none',
-                    }}
-                  >
-                    <option value="default">Default</option>
-                    <option value="ui">UI Component</option>
-                    <option value="processor">Data Processor</option>
-                    <option value="generator">Code Generator</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: 12,
-                    color: '#8888aa',
-                    marginBottom: 4,
-                  }}>Version</label>
-                  <input
-                    type="text"
-                    value={newPlugin.version}
-                    onChange={e => setNewPlugin({ ...newPlugin, version: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      background: '#1a1a2e',
-                      border: '1px solid #2a2a3e',
-                      borderRadius: 6,
-                      color: '#e8e8e8',
-                      fontSize: 13,
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label style={{
-                  display: 'block',
-                  fontSize: 12,
-                  color: '#8888aa',
-                  marginBottom: 4,
-                }}>Capabilities (comma-separated)</label>
-                <input
-                  type="text"
-                  value={newPlugin.capabilities}
-                  onChange={e => setNewPlugin({ ...newPlugin, capabilities: e.target.value })}
-                  placeholder="generate_code, analyze_data, connect_api"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: '#1a1a2e',
-                    border: '1px solid #2a2a3e',
-                    borderRadius: 6,
-                    color: '#e8e8e8',
-                    fontSize: 13,
-                    outline: 'none',
-                  }}
-                />
-              </div>
-            </div>
-            <div style={{
-              display: 'flex',
-              gap: 8,
-              justifyContent: 'flex-end',
-              marginTop: 20,
-              paddingTop: 16,
-              borderTop: '1px solid #1e1e30',
-            }}>
-              <button
-                onClick={() => setOpenCreateDialog(false)}
-                style={{
-                  padding: '10px 20px',
+              {JSON.stringify(pluginConfig, null, 2)}
+            </pre>
+          ) : (
+            <div style={{ color: '#8888aa' }}>Загрузка конфига плагина...</div>
+          )}
+
+          {/* Capabilities */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12, color: '#8888aa', marginBottom: 8 }}>ВОЗМОЖНОСТИ:</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {plugins.find(p => p.id === activePlugin)?.capabilities?.map((cap) => (
+                <span key={cap} style={{
+                  padding: '4px 8px',
                   background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#8888aa',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreatePlugin}
-                style={{
-                  padding: '10px 20px',
-                  background: '#4caf50',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Create
-              </button>
+                  borderRadius: 4,
+                  fontSize: 11,
+                  color: '#666',
+                }}>
+                  {cap}
+                </span>
+              ))}
             </div>
           </div>
         </div>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { PluginSettingsPanel } from './PluginSettingsPanel';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type TabId = 'server' | 'teacher' | 'student' | 'chat' | 'benchmark' | 'engine';
+type TabId = 'server' | 'teacher' | 'student' | 'chat' | 'benchmark' | 'engine' | 'plugins';
 
 interface TabItem {
   id: TabId;
@@ -38,6 +39,9 @@ export interface AppSettings {
   studentNumHeads: number;
   studentVocabSize: number;
   studentQuantization: string;
+
+  // Chat Mode
+  chatMode: 'human-teacher' | 'human-student' | 'human-teacher-student' | 'teacher-student';
 
   // Chat
   chatRoleColors: {
@@ -90,6 +94,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   studentVocabSize: 32000,
   studentQuantization: 'Q4_0',
 
+  // Chat Mode
+  chatMode: 'human-teacher',
+
   // Chat
   chatRoleColors: {
     human: '#8888aa',
@@ -127,6 +134,7 @@ const TABS: TabItem[] = [
   { id: 'chat', icon: '💬', label: 'Чат' },
   { id: 'benchmark', icon: '📊', label: 'Benchmark' },
   { id: 'engine', icon: '🔧', label: 'Engine' },
+  { id: 'plugins', icon: '🔌', label: 'Плагины' },
 ];
 
 // ============================================================================
@@ -824,8 +832,56 @@ function ChatTab({ settings, setSettings }: { settings: AppSettings; setSettings
     }));
   };
 
+  const CHAT_MODES = [
+    { id: 'human-teacher' as const, icon: '👨‍🎓', title: 'Человек + Учитель', desc: 'Задаёте вопрос — отвечает Teacher' },
+    { id: 'human-student' as const, icon: '🎓', title: 'Человек + Студент', desc: 'Задаёте вопрос — отвечает Student' },
+    { id: 'human-teacher-student' as const, icon: '🤝', title: 'Все трое', desc: 'Сравниваете ответы двух моделей' },
+    { id: 'teacher-student' as const, icon: '⚔️', title: 'Учитель ↔ Студент', desc: 'Модели общаются между собой' },
+  ];
+
+  const handleChatModeChange = (mode: typeof CHAT_MODES[number]['id']) => {
+    setSettings(prev => ({ ...prev, chatMode: mode }));
+  };
+
   return (
     <div>
+      <Section title="Режим чата" icon="🔄">
+        <SettingRow label="Выберите режим">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {CHAT_MODES.map(mode => (
+              <div
+                key={mode.id}
+                onClick={() => handleChatModeChange(mode.id)}
+                style={{
+                  padding: '12px 14px',
+                  background: settings.chatMode === mode.id ? '#121220' : '#0a0a0f',
+                  border: `1px solid ${settings.chatMode === mode.id ? '#7c6ff7' : '#1e1e30'}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <input
+                  type="radio"
+                  name="chatMode"
+                  checked={settings.chatMode === mode.id}
+                  onChange={() => handleChatModeChange(mode.id)}
+                  style={{ accentColor: '#7c6ff7' }}
+                />
+                <span style={{ fontSize: 20 }}>{mode.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e8e8e8' }}>{mode.title}</div>
+                  <div style={{ fontSize: 11, color: '#8888aa' }}>{mode.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SettingRow>
+      </Section>
+
       <Section title="Роли" icon="👥">
         {(['human', 'teacher', 'student'] as const).map(role => (
           <div key={role} style={{
@@ -1604,6 +1660,186 @@ function ModelStatusRow({ label, icon, loaded, path, modelId }: { label: string;
 }
 
 // ============================================================================
+// Plugins Tab
+// ============================================================================
+
+function PluginsTab() {
+  const [plugins, setPlugins] = useState<any[]>([]);
+  const [selectedPlugin, setSelectedPlugin] = useState<any | null>(null);
+
+  useEffect(() => {
+    loadPlugins();
+    const interval = setInterval(loadPlugins, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadPlugins = async () => {
+    try {
+      const { getAllPlugins } = await import('@/api.client');
+      const response = await getAllPlugins();
+      setPlugins(response.plugins || []);
+    } catch (error) {
+      console.error('Failed to load plugins:', error);
+    }
+  };
+
+  const enabledPlugins = plugins.filter((p: any) => p.state === 'enabled');
+  const disabledPlugins = plugins.filter((p: any) => p.state !== 'enabled');
+
+  return (
+    <div>
+      {selectedPlugin ? (
+        <div style={{ background: '#121220', borderRadius: 12, border: '1px solid #1e1e30', overflow: 'hidden' }}>
+          <PluginSettingsPanel
+            pluginId={selectedPlugin.id}
+            pluginName={selectedPlugin.sidebar_label || selectedPlugin.name}
+            pluginIcon={selectedPlugin.sidebar_icon || '🔌'}
+            onCancel={() => setSelectedPlugin(null)}
+          />
+        </div>
+      ) : (
+      <div>
+        <Section title="Активные плагины" icon="✅">
+        <SettingRow label="">
+          {enabledPlugins.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#8888aa', padding: 16, textAlign: 'center' }}>
+              Нет активных плагинов. Включите плагины ниже.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {enabledPlugins.map((plugin: any) => (
+                <div key={plugin.id} style={{
+                  padding: 14,
+                  background: '#121220',
+                  borderRadius: 8,
+                  border: '1px solid #1e1e30',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 20 }}>{plugin.sidebar_icon || '🔌'}</span>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#e8e8e8' }}>
+                        {plugin.sidebar_label || plugin.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#8888aa', marginTop: 2 }}>
+                        {plugin.description || ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => setSelectedPlugin(plugin)}
+                      style={{
+                        padding: '6px 14px',
+                        background: '#121220',
+                        border: '1px solid #7c6ff7',
+                        borderRadius: 6,
+                        color: '#7c6ff7',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      ⚙️ Настройки
+                    </button>
+                    <button
+                      onClick={() => {
+                        import('@/api.client').then(({ togglePlugin }) => {
+                          togglePlugin(plugin.id).then(() => loadPlugins());
+                        });
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        background: 'rgba(244, 67, 54, 0.1)',
+                        border: '1px solid #f44336',
+                        borderRadius: 6,
+                        color: '#f44336',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ✕ Выключить
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SettingRow>
+      </Section>
+
+      <Section title="Отключённые плагины" icon="⏸">
+        <SettingRow label="">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {disabledPlugins.map((plugin: any) => (
+              <div key={plugin.id} style={{
+                padding: 14,
+                background: '#121220',
+                borderRadius: 8,
+                border: '1px solid #1e1e30',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                opacity: 0.7,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{plugin.sidebar_icon || '🔌'}</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#8888aa' }}>
+                      {plugin.sidebar_label || plugin.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#666688', marginTop: 2 }}>
+                      {plugin.description || ''}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    import('@/api.client').then(({ togglePlugin }) => {
+                      togglePlugin(plugin.id).then(() => loadPlugins());
+                    });
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    background: 'rgba(76, 175, 80, 0.1)',
+                    border: '1px solid #4caf50',
+                    borderRadius: 6,
+                    color: '#4caf50',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  ✓ Включить
+                </button>
+              </div>
+            ))}
+            {disabledPlugins.length === 0 && (
+              <div style={{ fontSize: 13, color: '#8888aa', padding: 16, textAlign: 'center' }}>
+                Все плагины активны!
+              </div>
+            )}
+          </div>
+        </SettingRow>
+      </Section>
+      </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -1638,6 +1874,8 @@ export function SettingsPanel() {
         return <BenchmarkTab settings={settings} setSettings={setSettings} />;
       case 'engine':
         return <EngineTab settings={settings} setSettings={setSettings} />;
+      case 'plugins':
+        return <PluginsTab />;
       default:
         return null;
     }

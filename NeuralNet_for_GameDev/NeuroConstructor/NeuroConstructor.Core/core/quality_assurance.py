@@ -140,37 +140,47 @@ class QualityAssurance:
         return metrics
     
     def _calculate_architectural_similarity(self, teacher_arch: Dict, student_arch: Dict) -> float:
-        """Calculate architectural similarity between teacher and student."""
+        """Calculate architectural similarity between teacher and student.
+        
+        Compares architecture structure ratios rather than absolute values.
+        A well-compressed student should have consistent ratios across all dimensions.
+        """
         if not teacher_arch or not student_arch:
             return 0.0
+
+        # Check if student architecture is compatible with teacher
+        structural_params = ['hidden_size', 'num_layers', 'num_heads', 'head_dim']
+        ratios = []
         
-        similarity = 0.0
-        comparisons = 0
-        
-        for key in ['vocab_size', 'hidden_size', 'num_layers', 'num_heads', 'head_dim']:
+        for key in structural_params:
             if key in teacher_arch and key in student_arch:
                 teacher_val = teacher_arch[key]
                 student_val = student_arch[key]
                 
-                # Normalize values (0-1 scale)
-                if key == 'vocab_size':
-                    teacher_norm = min(teacher_val / 100000, 1.0)
-                    student_norm = min(student_val / 100000, 1.0)
-                elif key == 'hidden_size':
-                    teacher_norm = min(teacher_val / 8000, 1.0)
-                    student_norm = min(student_val / 8000, 1.0)
-                elif key in ['num_layers', 'num_heads']:
-                    teacher_norm = min(teacher_val / 100, 1.0)
-                    student_norm = min(student_val / 100, 1.0)
-                else:  # head_dim
-                    teacher_norm = min(teacher_val / 128, 1.0)
-                    student_norm = min(student_val / 128, 1.0)
-                
-                if teacher_norm > 0:
-                    similarity += 1.0 - abs(teacher_norm - student_norm)
-                    comparisons += 1
+                if teacher_val > 0:
+                    ratio = student_val / teacher_val
+                    ratios.append(ratio)
         
-        return similarity / comparisons if comparisons > 0 else 0.0
+        if not ratios:
+            return 0.0
+        
+        # Calculate consistency of compression ratios
+        # A good student has consistent compression across all dimensions
+        avg_ratio = sum(ratios) / len(ratios)
+        
+        # Check if ratios are reasonable (0.1 to 1.0)
+        if avg_ratio < 0.05 or avg_ratio > 1.5:
+            return 0.3  # Poor compression ratio
+        
+        # Calculate consistency (low variance = good)
+        variance = sum((r - avg_ratio) ** 2 for r in ratios) / len(ratios)
+        consistency = 1.0 - min(variance ** 0.5, 1.0)
+        
+        # Score based on consistency and reasonable compression
+        # Perfect consistency = 1.0, reasonable compression = 0.7-0.9
+        score = consistency * 0.6 + min(avg_ratio, 1.0) * 0.4
+        
+        return round(max(0.0, min(1.0, score)), 2)
     
     def _calculate_compression_quality(self, model_info: Dict) -> float:
         """Calculate quality of compression applied to model."""

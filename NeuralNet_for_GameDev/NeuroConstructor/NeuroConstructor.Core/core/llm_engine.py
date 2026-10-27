@@ -10,7 +10,7 @@ Usage:
     engine = LLMEngine.from_gguf("path/to/model.gguf")
     engine = LLMEngine.from_ollama(url="http://localhost:11434", model="llama3")
     engine = LLMEngine.mock()  # default
-    
+
     result = engine.generate(
         prompt="What is AI?",
         max_tokens=512,
@@ -19,10 +19,13 @@ Usage:
 """
 
 import json
+import logging
 import os
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Optional imports ────────────────────────────────────────────────────────
@@ -195,7 +198,7 @@ class LlamaCppEngine(LLMEngine):
             self._initialized = True
             return True
         except Exception as e:
-            print(f"LlamaCppEngine init error: {e}")
+            logger.warning(f"LlamaCppEngine init error: {e}")
             raise RuntimeError(f"Failed to load GGUF model: {str(e)}")
 
     def generate_stream(self, prompt: str, **kwargs):

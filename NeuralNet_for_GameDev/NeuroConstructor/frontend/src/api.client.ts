@@ -182,7 +182,7 @@ export async function exportChatHistory(mode: string, messages: Array<{ role: st
 }
 
 // ============================================================================
-// Plugin Manager
+// Plugin Manager (Legacy)
 // ============================================================================
 
 export async function listPlugins() {
@@ -206,6 +206,49 @@ export async function createPlugin(plugin: {
 export async function deletePlugin(pluginName: string) {
   const api = getApi();
   const response = await api.delete(`/api/plugins/${encodeURIComponent(pluginName)}`);
+  return response.data;
+}
+
+// ============================================================================
+// Plugin System v2 (new registry-based)
+// ============================================================================
+
+export async function getAllPlugins() {
+  const api = getApi();
+  const response = await api.get('/api/plugins/v2');
+  return response.data;
+}
+
+export async function togglePlugin(pluginId: string) {
+  const api = getApi();
+  const response = await api.post(`/api/plugins/v2/${encodeURIComponent(pluginId)}/toggle`);
+  return response.data;
+}
+
+export async function getPluginInfo(pluginId: string) {
+  const api = getApi();
+  const response = await api.get(`/api/plugins/v2/${encodeURIComponent(pluginId)}`);
+  return response.data;
+}
+
+export async function executePluginMethod(pluginId: string, method: string, args?: any) {
+  const api = getApi();
+  const response = await api.post(`/api/plugins/v2/${encodeURIComponent(pluginId)}/execute`, {
+    method,
+    args: args || {},
+  });
+  return response.data;
+}
+
+export async function getPluginSidebarItems() {
+  const api = getApi();
+  const response = await api.get('/api/plugins/v2/sidebar-items');
+  return response.data;
+}
+
+export async function getPluginUIPanels() {
+  const api = getApi();
+  const response = await api.get('/api/plugins/v2/ui-panels');
   return response.data;
 }
 
@@ -239,5 +282,110 @@ export async function fineTuneStudent(teacherModel: string, studentModel: string
     teacher_model: teacherModel,
     student_model: studentModel,
   });
+  return response.data;
+}
+
+// ============================================================================
+// Visualizer API
+// ============================================================================
+
+export async function analyzeModel(filename: string) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/visualizer/analyze/${encodeURIComponent(cleanFilename)}`);
+  return response.data;
+}
+
+export async function getModelInfo(filename: string) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/visualizer/info/${encodeURIComponent(cleanFilename)}`);
+  return response.data;
+}
+
+export async function getTensorInfo(filename: string) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/visualizer/tensors/${encodeURIComponent(cleanFilename)}`);
+  return response.data;
+}
+
+export async function getWeightStats(filename: string) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/visualizer/stats/${encodeURIComponent(cleanFilename)}`);
+  return response.data;
+}
+
+export async function generateAtlas(filename: string, outputDir: string) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.post('/api/visualizer/atlas', {
+    filename: cleanFilename,
+    output_dir: outputDir,
+  });
+  return response.data;
+}
+
+export async function removeLayerFromModel(
+  filename: string,
+  layerIndex: number,
+) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.post('/api/visualizer/edit/remove-layer', {
+    filename: cleanFilename,
+    layer_index: layerIndex,
+  });
+  return response.data;
+}
+
+export async function removeNeuronsFromModel(
+  filename: string,
+  layerIndex: number,
+  neuronIndices: number[],
+) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.post('/api/visualizer/edit/remove-neurons', {
+    filename: cleanFilename,
+    layer_index: layerIndex,
+    neuron_indices: neuronIndices,
+  });
+  return response.data;
+}
+
+export async function zeroOutWeightsInModel(
+  filename: string,
+  layerIndex: number,
+  neuronIndices: number[],
+) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.post('/api/visualizer/edit/zero-weights', {
+    filename: cleanFilename,
+    layer_index: layerIndex,
+    neuron_indices: neuronIndices,
+  });
+  return response.data;
+}
+
+export async function exportEditedModel(
+  filename: string,
+  outputPath: string,
+) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.post('/api/visualizer/edit/export', {
+    filename: cleanFilename,
+    output_path: outputPath,
+  });
+  return response.data;
+}
+
+export async function getEditOperations(filename: string) {
+  const api = getApi();
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+  const response = await api.get(`/api/visualizer/edit/operations/${encodeURIComponent(cleanFilename)}`);
   return response.data;
 }

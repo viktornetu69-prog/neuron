@@ -7,6 +7,7 @@ import sys
 import os
 import json
 import struct
+import uuid
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
@@ -15,7 +16,7 @@ from typing import List, Dict, Any, Optional
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "NeuroConstructor.Core", "core"))
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -1323,12 +1324,12 @@ class LLMStatusResponse(BaseModel):
     # Separate states for teacher and student
     teacher_loaded: bool = False
     teacher_path: str = ""
-    teacher_model_id: Optional[str] = ""
-    teacher_loaded_at: Optional[str] = ""
+    teacher_model_id: Optional[str] = None
+    teacher_loaded_at: Optional[str] = None
     student_loaded: bool = False
     student_path: str = ""
-    student_model_id: Optional[str] = ""
-    student_loaded_at: Optional[str] = ""
+    student_model_id: Optional[str] = None
+    student_loaded_at: Optional[str] = None
     teacher_files: List[Dict[str, Any]] = []
     student_files: List[Dict[str, Any]] = []
     gpu_layers: int = 0
@@ -1404,16 +1405,16 @@ async def get_llm_status():
         teacher_info = server_state.get("teacher", {}).get("model_info") or {}
         teacher_size_gb = teacher_info.get("model_size_gb", 0)
         teacher_type = teacher_info.get("model_type", "")
-        teacher_model_id = server_state.get("teacher", {}).get("model_id")
-        teacher_loaded_at = server_state.get("teacher", {}).get("loaded_at")
+        teacher_model_id = server_state.get("teacher", {}).get("model_id") or ""
+        teacher_loaded_at = server_state.get("teacher", {}).get("loaded_at") or ""
 
         student_loaded = server_state.get("student", {}).get("model_loaded", False)
         student_path = server_state.get("student", {}).get("model_path") or ""
         student_info = server_state.get("student", {}).get("model_info") or {}
         student_size_gb = student_info.get("model_size_gb", 0)
         student_type = student_info.get("model_type", "")
-        student_model_id = server_state.get("student", {}).get("model_id")
-        student_loaded_at = server_state.get("student", {}).get("loaded_at")
+        student_model_id = server_state.get("student", {}).get("model_id") or ""
+        student_loaded_at = server_state.get("student", {}).get("loaded_at") or ""
 
         return LLMStatusResponse(
             llama_cpp_available=llama_cpp_available,
@@ -1622,6 +1623,209 @@ async def delete_plugin(plugin_name: str):
         logger.error(f"Delete plugin error: {e}")
         return PluginDeleteResponse(success=False, message=str(e))
 
+# ============================================================================
+# Plugin System v2 API (registry-based)
+# ============================================================================
+
+# Импортируем новый registry
+import sys
+backend_dir = os.path.normpath(os.path.dirname(__file__))
+neuro_root = os.path.normpath(os.path.join(backend_dir, '..'))
+if neuro_root not in sys.path:
+    sys.path.insert(0, neuro_root)
+# Также добавляем backend и core в path
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+core_dir = os.path.normpath(os.path.join(backend_dir, '..', 'core'))
+if core_dir not in sys.path:
+    sys.path.insert(0, core_dir)
+
+try:
+    from core import plugin_system
+    from core import plugin_types
+    PLUGIN_REGISTRY_AVAILABLE = True
+    logger.info(f"Plugin registry v2 loaded from {core_dir}")
+except ImportError as e:
+    PLUGIN_REGISTRY_AVAILABLE = False
+    logger.warning(f"Plugin registry v2 not available: {e}")
+
+
+class PluginsV2Response(BaseModel):
+    success: bool = True
+    plugins: list = []
+    total: int = 0
+    enabled: int = 0
+
+
+class PluginToggleResponse(BaseModel):
+    success: bool
+    message: str
+
+
+class PluginExecuteRequest(BaseModel):
+    method: str
+    args: dict = {}
+
+
+class PluginExecuteResponse(BaseModel):
+    success: bool
+    result: dict = {}
+    error: str = ""
+
+
+class SidebarItemsResponse(BaseModel):
+    items: list = []
+
+
+class UIPanelsResponse(BaseModel):
+    panels: list = []
+
+
+@app.get("/api/plugins/v2", response_model=PluginsV2Response)
+async def list_plugins_v2():
+    """
+    Новый API для управления плагинами.
+    Возвращает все плагины из registry с полной информацией.
+    """
+    if not PLUGIN_REGISTRY_AVAILABLE:
+        return PluginsV2Response(
+            success=False,
+            plugins=[],
+            error_message="Plugin registry not available"
+        )
+
+    try:
+        result = plugin_system.get_plugins()
+        return PluginsV2Response(
+            success=True,
+            plugins=result.get('plugins', []),
+            total=result.get('total', 0),
+            enabled=result.get('enabled', 0),
+        )
+    except Exception as e:
+        logger.error(f"Plugin v2 list error: {e}")
+        return PluginsV2Response(success=False, plugins=[])
+
+
+@app.get("/api/plugins/v2/sidebar-items", response_model=SidebarItemsResponse)
+async def get_plugin_sidebar_items_v2():
+    """Возвращает пункты sidebar от включённых плагинов."""
+    if not PLUGIN_REGISTRY_AVAILABLE:
+        return SidebarItemsResponse(items=[])
+
+    try:
+        items = plugin_system.get_plugin_sidebar_items()
+        return SidebarItemsResponse(items=[
+            {
+                'id': item.get('id', ''),
+                'icon': item.get('icon', '🔌'),
+                'label': item.get('label', ''),
+                'category': item.get('category', ''),
+            }
+            for item in items
+        ])
+    except Exception as e:
+        logger.error(f"Plugin sidebar items error: {e}")
+        return SidebarItemsResponse(items=[])
+
+
+@app.get("/api/plugins/v2/ui-panels", response_model=UIPanelsResponse)
+async def get_plugin_ui_panels_v2():
+    """Возвращает UI панели от включённых плагинов."""
+    if not PLUGIN_REGISTRY_AVAILABLE:
+        return UIPanelsResponse(panels=[])
+
+    try:
+        panels = plugin_system.get_plugin_ui_panels()
+        return UIPanelsResponse(panels=[
+            {
+                'id': panel.get('id', ''),
+                'name': panel.get('name', ''),
+                'has_ui': panel.get('has_ui', False),
+                'category': panel.get('category', ''),
+            }
+            for panel in panels
+        ])
+    except Exception as e:
+        logger.error(f"Plugin UI panels error: {e}")
+        return UIPanelsResponse(panels=[])
+
+
+@app.get("/api/plugins/v2/{plugin_id}", response_model=PluginExecuteResponse)
+async def get_plugin_info_v2(plugin_id: str):
+    """Получает информацию о конкретном плагине."""
+    if not PLUGIN_REGISTRY_AVAILABLE:
+        return PluginExecuteResponse(success=False, error="Plugin registry not available")
+
+    try:
+        info = plugin_system.get_plugin_info(plugin_id)
+        if info:
+            return PluginExecuteResponse(success=True, result=info)
+        return PluginExecuteResponse(success=False, error=f"Plugin not found: {plugin_id}")
+    except Exception as e:
+        logger.error(f"Plugin info error: {e}")
+        return PluginExecuteResponse(success=False, error=str(e))
+
+
+@app.post("/api/plugins/v2/{plugin_id}/toggle", response_model=PluginToggleResponse)
+async def toggle_plugin_v2(plugin_id: str):
+    """Включает/отключает плагин."""
+    if not PLUGIN_REGISTRY_AVAILABLE:
+        return PluginToggleResponse(success=False, message="Plugin registry not available")
+
+    try:
+        result = plugin_system.toggle_plugin(plugin_id)
+        return PluginToggleResponse(
+            success=result['success'],
+            message=result.get('message', ''),
+        )
+    except Exception as e:
+        logger.error(f"Plugin toggle error: {e}")
+        return PluginToggleResponse(success=False, message=str(e))
+
+
+@app.post("/api/plugins/v2/{plugin_id}/execute", response_model=PluginExecuteResponse)
+async def execute_plugin_v2(plugin_id: str, request: PluginExecuteRequest):
+    """Вызывает метод плагина."""
+    if not PLUGIN_REGISTRY_AVAILABLE:
+        return PluginExecuteResponse(success=False, error="Plugin registry not available")
+
+    try:
+        result = plugin_system.execute_plugin(plugin_id, request.method, {'config': request.args, 'args': request.args})
+        return PluginExecuteResponse(success=True, result=result)
+    except Exception as e:
+        logger.error(f"Plugin execute error: {e}")
+        return PluginExecuteResponse(success=False, error=str(e))
+
+
+@app.get("/api/plugins/v2/events")
+async def plugin_events_sse():
+    """
+    SSE endpoint для real-time уведомлений об изменении плагинов.
+    """
+    from fastapi.responses import StreamingResponse
+    import asyncio
+    import json
+    
+    async def event_generator():
+        try:
+            while True:
+                yield "event: ping\ndata: {}\n\n"
+                await asyncio.sleep(15)
+        except asyncio.CancelledError:
+            pass
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
 # ============================================
 # Dataset Viewer endpoint
 # ============================================
@@ -1730,6 +1934,830 @@ async def view_dataset(request: DatasetViewRequest):
     except Exception as e:
         logger.error(f"Dataset view error: {e}")
         return DatasetViewResponse(success=False, error_message=str(e))
+
+
+@app.post("/api/datasets/temp-upload")
+async def temp_upload_dataset(file: UploadFile = File(...)):
+    """Временная загрузка файла датасета для последующей обработки."""
+    try:
+        # Сохраняем временный файл
+        temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "NeuroConstructor.Core", "datasets", "_temp")
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Генерируем уникальное имя
+        import time
+        filename = f"temp_{int(time.time())}_{uuid.uuid4().hex[:8]}_{file.filename}"
+        temp_path = os.path.join(temp_dir, filename)
+
+        # Читаем и сохраняем
+        content = await file.read()
+        with open(temp_path, 'wb') as f:
+            f.write(content)
+
+        logger.info(f"Temp file uploaded: {temp_path} ({len(content)} bytes)")
+
+        return {
+            "success": True,
+            "temp_path": temp_path,
+            "filename": filename,
+            "size": len(content),
+        }
+    except Exception as e:
+        logger.error(f"Temp upload error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ============================================
+# Activation Pipeline endpoints (Topology + Activations)
+# ============================================
+
+class DatasetUploadRequest(BaseModel):
+    file_path: Optional[str] = None
+    folder_path: Optional[str] = None
+
+
+class DatasetFolderUploadRequest(BaseModel):
+    folder_path: str
+
+
+class ActivationAnalysisRequest(BaseModel):
+    dataset_id: str
+    model_path: str
+    threshold: float = 0.7
+    max_samples: int = 100
+
+
+class TopologyRequest(BaseModel):
+    dataset_id: str
+    layout_type: str = "force_directed"
+
+
+class ExportActivatedRequest(BaseModel):
+    dataset_id: str
+    model_path: str
+    output_path: Optional[str] = None
+    threshold: float = 0.7
+
+
+@app.post("/api/activation/datasets/upload", response_model=DatasetViewResponse)
+async def upload_dataset(request: DatasetUploadRequest):
+    """Загрузка датасета из JSON/CSV файла."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        if not request.file_path:
+            return DatasetViewResponse(success=False, error_message="file_path is required")
+        result = server_state["engine"].load_dataset_from_file(request.file_path)
+        if result.get("success"):
+            return DatasetViewResponse(
+                success=True,
+                dataset_id=result.get("dataset_id", ""),
+                total_rows=result.get("count", 0),
+                error_message="",
+            )
+        else:
+            return DatasetViewResponse(success=False, error_message=result.get("error", "Failed to upload dataset"))
+    except Exception as e:
+        logger.error(f"Upload dataset error: {e}")
+        return DatasetViewResponse(success=False, error_message=str(e))
+
+
+@app.post("/api/activation/datasets/upload-folder")
+async def upload_dataset_folder(request: DatasetFolderUploadRequest):
+    """Загрузка датасета из папки с текстами."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].load_dataset_from_folder(request.folder_path)
+        return result
+    except Exception as e:
+        logger.error(f"Upload dataset folder error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/activation/run-analysis")
+async def run_activation_analysis(request: ActivationAnalysisRequest):
+    """Прогон активаций датасета через модель."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].run_activation_analysis(
+            dataset_id=request.dataset_id,
+            model_path=request.model_path,
+            threshold=request.threshold,
+            max_samples=request.max_samples,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Run activation analysis error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/activation/topology")
+async def get_topology(request: TopologyRequest):
+    """Получить 3D топологию нейронов."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].get_topology(
+            dataset_id=request.dataset_id,
+            layout_type=request.layout_type,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Get topology error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/activation/export")
+async def export_activated_model(request: ExportActivatedRequest):
+    """Экспорт активированного участка модели."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].export_activated_model(
+            dataset_id=request.dataset_id,
+            model_path=request.model_path,
+            output_path=request.output_path,
+            threshold=request.threshold,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Export activated model error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ============================================
+# MCP (Model Context Protocol) endpoints
+# ============================================
+
+from fastapi.responses import JSONResponse
+
+
+@app.post("/mcp")
+async def mcp_server(request: Request):
+    """
+    MCP Server endpoint — принимает JSON-RPC запросы от ИИ (Claude, Cursor и др.).
+    
+    MCP Standard: https://modelcontextprotocol.io/specification
+    
+    JSON-RPC Methods:
+    - initialize — handshake
+    - tools/list — получить все инструменты
+    - tools/call — вызвать инструмент
+    - resources/list — получить ресурсы
+    - resources/read — прочитать ресурс
+    - prompts/list — получить промпты
+    - prompts/get — получить заполненный промпт
+    """
+    try:
+        from NeuroConstructor.Core.core.mcp import create_neuroconstructor_mcp_server
+        from NeuroConstructor.Core.core.mcp_core import JSONRPCRequest
+        
+        # Создаём MCP сервер
+        server = create_neuroconstructor_mcp_server()
+        
+        # Парсим JSON-RPC запрос
+        body = await request.json()
+        mcp_request = JSONRPCRequest.from_dict(body)
+        
+        # Обрабатываем запрос
+        mcp_response = await server.handle_request(mcp_request)
+        
+        return JSONResponse(content=mcp_response.to_dict())
+    
+    except Exception as e:
+        logger.error(f"MCP Server error: {e}", exc_info=True)
+        return JSONResponse(
+            content={
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": f"MCP Internal error: {str(e)}",
+                },
+                "id": None,
+            }
+        )
+
+
+@app.get("/mcp/manifest")
+async def mcp_manifest():
+    """
+    MCP Manifest — полная презентация NeuroConstructor для ИИ и программ.
+    
+    Возвращает JSON со всеми модулями, tools, resources, prompts, API endpoints.
+    """
+    try:
+        from NeuroConstructor.Core.core.mcp_manifest import get_manifest_json
+        
+        manifest_json = get_manifest_json()
+        return JSONResponse(content=json.loads(manifest_json))
+    
+    except Exception as e:
+        logger.error(f"MCP Manifest error: {e}")
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500,
+        )
+
+
+@app.get("/mcp/tools")
+async def mcp_tools_list():
+    """Список всех MCP инструментов с описаниями."""
+    try:
+        from NeuroConstructor.Core.core.mcp import get_tool_descriptions
+        
+        return {
+            "tools": [
+                {"name": name, "description": desc}
+                for name, desc in get_tool_descriptions().items()
+            ]
+        }
+    
+    except Exception as e:
+        logger.error(f"MCP Tools error: {e}")
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500,
+        )
+
+
+@app.get("/mcp/resources")
+async def mcp_resources_list():
+    """Список всех MCP ресурсов (URI)."""
+    try:
+        from NeuroConstructor.Core.core.mcp import get_resource_uris
+        
+        return {
+            "resources": [
+                {"uri": uri}
+                for uri in get_resource_uris()
+            ]
+        }
+    
+    except Exception as e:
+        logger.error(f"MCP Resources error: {e}")
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500,
+        )
+
+
+@app.get("/mcp/prompts")
+async def mcp_prompts_list():
+    """Список всех MCP промптов."""
+    try:
+        from NeuroConstructor.Core.core.mcp import get_prompt_names
+        
+        return {
+            "prompts": get_prompt_names()
+        }
+    
+    except Exception as e:
+        logger.error(f"MCP Prompts error: {e}")
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500,
+        )
+
+
+# ============================================
+# Dataset Generation endpoints
+# ============================================
+
+class DatasetGenerationRequest(BaseModel):
+    dataset_type: str  # text, image, video, gamedev, 3d_model, desktop, gamepad
+    name: Optional[str] = ""
+    count: int = 100
+    labels: List[str] = []
+    quality_threshold: float = 0.7
+    auto_validate: bool = True
+    tags: List[str] = []
+
+
+class AIExternalGenerationRequest(BaseModel):
+    """Запрос от внешней ИИ через MCP."""
+    dataset_type: str
+    ai_prompt: str
+    count: int = 100
+    labels: List[str] = []
+    validation_threshold: float = 0.7
+
+
+@app.post("/api/datasets/generate")
+async def generate_dataset(request: DatasetGenerationRequest):
+    """
+    Генерация датасета пользователем.
+    
+    Поддерживаемые типы:
+    - text: Лингвистические модели
+    - image: Картинки, визуальные данные
+    - video: Видео, захват экрана
+    - gamedev: Игровые движки, NPC, состояния
+    - 3d_model: GLTF, STL, OBJ для 3D редакторов
+    - desktop: Захват рабочего стола, мышь/клавиатура
+    - gamepad: Геймпады, контроллеры
+    """
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        # Импортируем генераторы
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "NeuroConstructor.Core", "core"))
+        from dataset_generator import (
+            DatasetGeneratorManager,
+            GenerationConfig,
+            TextDatasetGenerator,
+            ImageDatasetGenerator,
+            VideoDatasetGenerator,
+            GameDevDatasetGenerator,
+            D3ModelDatasetGenerator,
+            DesktopDatasetGenerator,
+            GamepadDatasetGenerator,
+        )
+
+        manager = DatasetGeneratorManager()
+        
+        # Регистрируем генераторы
+        manager.register_generator("text", TextDatasetGenerator())
+        manager.register_generator("image", ImageDatasetGenerator())
+        manager.register_generator("video", VideoDatasetGenerator())
+        manager.register_generator("gamedev", GameDevDatasetGenerator())
+        manager.register_generator("3d_model", D3ModelDatasetGenerator())
+        manager.register_generator("desktop", DesktopDatasetGenerator())
+        manager.register_generator("gamepad", GamepadDatasetGenerator())
+
+        config = GenerationConfig(
+            dataset_type=request.dataset_type,
+            name=request.name,
+            count=request.count,
+            labels=request.labels,
+            quality_threshold=request.quality_threshold,
+            auto_validate=request.auto_validate,
+            tags=request.tags,
+        )
+
+        result = manager.generate_sync(config)
+        
+        return {
+            "success": True,
+            "dataset_id": result.dataset_id,
+            "name": result.name,
+            "count": result.count,
+            "dataset_type": result.dataset_type,
+            "storage_path": result.storage_path,
+        }
+    except Exception as e:
+        logger.error(f"Dataset generation error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+@app.post("/api/datasets/ai-generate")
+async def ai_generate_dataset(request: AIExternalGenerationRequest):
+    """
+    AI External Generation — внешняя ИИ генерирует датасет через MCP.
+    
+    Используется когда внешняя ИИ система (Claude, Cursor и др.)
+    сама создаёт и валидирует датасеты.
+    """
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "NeuroConstructor.Core", "core"))
+        from dataset_generator import (
+            DatasetGeneratorManager,
+            DatasetStorageManager,
+            GenerationConfig,
+            AIDatasetGenerator,
+        )
+
+        storage = DatasetStorageManager()
+        manager = DatasetGeneratorManager(storage)
+        ai_generator = AIDatasetGenerator(storage)
+
+        config = GenerationConfig(
+            dataset_type=request.dataset_type,
+            count=request.count,
+            labels=request.labels,
+        )
+
+        # AI генерирует датасет
+        manifest = ai_generator.generate_via_mcp(config, request.ai_prompt)
+
+        # AI валидирует и исправляет
+        validation_result = ai_generator.validate_and_fix(manifest.dataset_id)
+
+        return {
+            "success": True,
+            "dataset_id": manifest.dataset_id,
+            "ai_prompt": request.ai_prompt,
+            "validation": {
+                "is_valid": validation_result.is_valid,
+                "quality_score": validation_result.quality_score,
+                "issues": validation_result.issues,
+            },
+        }
+    except Exception as e:
+        logger.error(f"AI dataset generation error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+@app.get("/api/datasets/generators")
+async def list_dataset_generators():
+    """Список доступных генераторов датасетов."""
+    return {
+        "generators": [
+            {
+                "type": "text",
+                "name": "Text Dataset Generator",
+                "description": "Генерация текстовых датасетов для LLM (классификация, диалоги, QA)",
+                "formats": ["JSON", "CSV", "JSONL"],
+            },
+            {
+                "type": "image",
+                "name": "Image Dataset Generator",
+                "description": "Генерация датасетов изображений (классификация, сегментация, детекшн)",
+                "formats": ["PNG", "JPG", "WEBP"],
+            },
+            {
+                "type": "video",
+                "name": "Video Dataset Generator",
+                "description": "Генерация видео датасетов (распознавание действий, трекинг)",
+                "formats": ["MP4", "AVI", "WEBM"],
+            },
+            {
+                "type": "gamedev",
+                "name": "GameDev Dataset Generator",
+                "description": "Датасеты для игровых движков (NPC, состояния, карты)",
+                "formats": ["JSON", "CSV"],
+            },
+            {
+                "type": "3d_model",
+                "name": "3D Model Dataset Generator",
+                "description": "Датасеты 3D моделей (GLTF, STL, OBJ для 3D редакторов)",
+                "formats": ["GLTF", "GLB", "STL", "OBJ"],
+            },
+            {
+                "type": "desktop",
+                "name": "Desktop Dataset Generator",
+                "description": "Захват рабочего стола, виртуальная мышь и клавиатура",
+                "formats": ["PNG", "JSON"],
+            },
+            {
+                "type": "gamepad",
+                "name": "Gamepad Dataset Generator",
+                "description": "Датасеты контроллеров и геймпадов (buttons, sticks, triggers)",
+                "formats": ["JSON", "CSV"],
+            },
+        ]
+    }
+
+
+@app.get("/api/datasets/storage")
+async def get_dataset_storage():
+    """Информация о хранилище датасетов."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "NeuroConstructor.Core", "core"))
+        from dataset_generator import DatasetStorageManager
+
+        storage = DatasetStorageManager()
+        datasets = storage.list_all_datasets()
+        
+        return {
+            "storage_path": storage.base_dir,
+            "datasets": datasets,
+            "total_count": len(datasets),
+        }
+    except Exception as e:
+        logger.error(f"Storage info error: {e}")
+        return {
+            "error": str(e),
+        }
+
+
+@app.get("/api/activation/datasets")
+async def list_datasets():
+    """Список всех загруженных датасетов."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].list_datasets()
+        return result
+    except Exception as e:
+        logger.error(f"List datasets error: {e}")
+        return {"datasets": []}
+
+
+@app.get("/api/activation/analyses")
+async def list_analyses():
+    """Список всех выполненных анализов."""
+    if not server_state["engine"]:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    try:
+        result = server_state["engine"].list_analyses()
+        return result
+    except Exception as e:
+        logger.error(f"List analyses error: {e}")
+        return {"analyses": []}
+
+
+# ─── Visualizer API Endpoints ────────────────────────────────────────────────────
+
+@app.get("/api/visualizer/analyze/{filename}")
+async def visualize_analyze_model(filename: str):
+    """Полный анализ GGUF модели через ModelAnalyzer."""
+    try:
+        from NeuroConstructor.Core.editor import ModelAnalyzer
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        analyzer = ModelAnalyzer(model_path)
+        result = analyzer.analyze()
+        return result
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelAnalyzer not available (gguf_io.py required)")
+    except Exception as e:
+        logger.error(f"Visualize analyze error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/visualizer/info/{filename}")
+async def visualize_get_model_info(filename: str):
+    """Информация о модели."""
+    try:
+        from NeuroConstructor.Core.editor import ModelAnalyzer
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        analyzer = ModelAnalyzer(model_path)
+        return analyzer.get_model_info()
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelAnalyzer not available")
+    except Exception as e:
+        logger.error(f"Visualize get info error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/visualizer/tensors/{filename}")
+async def visualize_get_tensor_info(filename: str):
+    """Информация о тензорах."""
+    try:
+        from NeuroConstructor.Core.editor import ModelAnalyzer
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        analyzer = ModelAnalyzer(model_path)
+        return analyzer.get_tensor_info()
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelAnalyzer not available")
+    except Exception as e:
+        logger.error(f"Visualize get tensor info error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/visualizer/stats/{filename}")
+async def visualize_get_weight_stats(filename: str):
+    """Статистика весов."""
+    try:
+        from NeuroConstructor.Core.editor import ModelAnalyzer
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        analyzer = ModelAnalyzer(model_path)
+        return analyzer.get_weight_stats()
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelAnalyzer not available")
+    except Exception as e:
+        logger.error(f"Visualize get weight stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/visualizer/atlas")
+async def visualize_generate_atlas(data: dict):
+    """Генерация atlas.json, model_spec.json, weight_stats.json."""
+    try:
+        from NeuroConstructor.Core.editor import ModelAnalyzer
+        
+        filename = data.get("filename")
+        output_dir = data.get("output_dir", "temp/atlas_output")
+        
+        if not filename:
+            raise HTTPException(status_code=400, detail="filename is required")
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        analyzer = ModelAnalyzer(model_path)
+        return analyzer.generate_atlas(output_dir)
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelAnalyzer not available")
+    except Exception as e:
+        logger.error(f"Visualize generate atlas error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/visualizer/edit/remove-layer")
+async def visualize_remove_layer(data: dict):
+    """Удаление слоя из модели."""
+    try:
+        from NeuroConstructor.Core.editor import ModelEditor
+        
+        filename = data.get("filename")
+        layer_index = data.get("layer_index")
+        
+        if not filename or layer_index is None:
+            raise HTTPException(status_code=400, detail="filename and layer_index are required")
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        editor = ModelEditor(model_path)
+        editor.remove_layer(layer_index)
+        return {"status": "success", "message": f"Layer {layer_index} removed"}
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelEditor not available")
+    except Exception as e:
+        logger.error(f"Visualize remove layer error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/visualizer/edit/remove-neurons")
+async def visualize_remove_neurons(data: dict):
+    """Удаление нейронов из слоя."""
+    try:
+        from NeuroConstructor.Core.editor import ModelEditor
+        
+        filename = data.get("filename")
+        layer_index = data.get("layer_index")
+        neuron_indices = data.get("neuron_indices", [])
+        
+        if not filename or layer_index is None or not neuron_indices:
+            raise HTTPException(status_code=400, detail="filename, layer_index, and neuron_indices are required")
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        editor = ModelEditor(model_path)
+        editor.remove_neurons(layer_index, neuron_indices)
+        return {"status": "success", "message": f"Neurons {neuron_indices} removed from layer {layer_index}"}
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelEditor not available")
+    except Exception as e:
+        logger.error(f"Visualize remove neurons error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/visualizer/edit/zero-weights")
+async def visualize_zero_weights(data: dict):
+    """Обнуление весов нейронов."""
+    try:
+        from NeuroConstructor.Core.editor import ModelEditor
+        
+        filename = data.get("filename")
+        layer_index = data.get("layer_index")
+        neuron_indices = data.get("neuron_indices", [])
+        
+        if not filename or layer_index is None or not neuron_indices:
+            raise HTTPException(status_code=400, detail="filename, layer_index, and neuron_indices are required")
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        editor = ModelEditor(model_path)
+        editor.zero_out_weights(layer_index, neuron_indices)
+        return {"status": "success", "message": f"Weights zeroed for neurons {neuron_indices} in layer {layer_index}"}
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelEditor not available")
+    except Exception as e:
+        logger.error(f"Visualize zero weights error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/visualizer/edit/export")
+async def visualize_export_edited_model(data: dict):
+    """Экспорт изменённой модели."""
+    try:
+        from NeuroConstructor.Core.editor import ModelEditor
+        
+        filename = data.get("filename")
+        output_path = data.get("output_path", "temp/edited_model.gguf")
+        
+        if not filename:
+            raise HTTPException(status_code=400, detail="filename is required")
+        
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+        
+        editor = ModelEditor(model_path)
+        result = editor.save_modified(output_path)
+        return result
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelEditor not available")
+    except Exception as e:
+        logger.error(f"Visualize export edited model error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/visualizer/edit/operations/{filename}")
+async def visualize_get_edit_operations(filename: str):
+    """Список выполненных операций редактирования."""
+    try:
+        from NeuroConstructor.Core.editor import ModelEditor
+
+        model_path = os.path.join("models", filename)
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_path}")
+
+        editor = ModelEditor(model_path)
+        return {"operations": editor.get_operations()}
+    except ImportError:
+        raise HTTPException(status_code=503, detail="ModelEditor not available")
+    except Exception as e:
+        logger.error(f"Visualize get edit operations error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Preview Server Management ───────────────────────────────────────────────────
+
+@app.post("/api/preview/start")
+async def preview_start_server(data: dict):
+    """Запуск preview сервера."""
+    try:
+        from NeuroConstructor.Core.core.preview_server_manager import PreviewServerManager
+        
+        if "engine" not in server_state:
+            server_state["engine"] = type('obj', (object,), {})()
+        
+        if not hasattr(server_state["engine"], "preview_manager"):
+            server_state["engine"].preview_manager = PreviewServerManager()
+        
+        command = data.get("command", "npm run dev")
+        cwd = data.get("cwd", None)
+        name = data.get("name", "preview")
+        
+        result = server_state["engine"].preview_manager.start_server(command, cwd, name)
+        return result
+    except Exception as e:
+        logger.error(f"Preview start error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/preview/stop")
+async def preview_stop_server(data: dict = None):
+    """Остановка preview сервера."""
+    try:
+        from NeuroConstructor.Core.core.preview_server_manager import PreviewServerManager
+        
+        if "engine" not in server_state:
+            return {"success": False, "message": "Engine not initialized"}
+        
+        if not hasattr(server_state["engine"], "preview_manager"):
+            return {"success": False, "message": "Preview manager not initialized"}
+        
+        name = data.get("name", "preview") if data else "preview"
+        result = server_state["engine"].preview_manager.stop_server(name)
+        return result
+    except Exception as e:
+        logger.error(f"Preview stop error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/preview/status")
+async def preview_get_status(name: str = "preview"):
+    """Статус preview сервера."""
+    try:
+        from NeuroConstructor.Core.core.preview_server_manager import PreviewServerManager
+        
+        if "engine" not in server_state:
+            return {"success": True, "exists": False}
+        
+        if not hasattr(server_state["engine"], "preview_manager"):
+            return {"success": True, "exists": False}
+        
+        result = server_state["engine"].preview_manager.get_status(name)
+        return result
+    except Exception as e:
+        logger.error(f"Preview status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -11,12 +11,15 @@ Pipeline:
 """
 
 import json
+import logging
 import os
 from typing import Dict, List, Optional, Any, Callable, Union
 from datetime import datetime
 from dataclasses import dataclass, field
 
 from answer_comparator import AnswerComparator, ComparisonEngine, BenchmarkReport
+
+logger = logging.getLogger(__name__)
 
 # Import LLM Engine if available
 try:
@@ -289,12 +292,12 @@ class BenchmarkRunner:
                         ),
                     )
                 except Exception as e:
-                    print(f"Warning: Failed to load Teacher model: {str(e)}")
+                    logger.warning(f"Failed to load Teacher model: {str(e)}")
 
             # Create Student engine
             if config.student_model_path and os.path.exists(config.student_model_path):
                 if not config.student_model_path.endswith('.gguf'):
-                    print(f"Warning: Student model must be .gguf: {config.student_model_path}")
+                    logger.warning(f"Student model must be .gguf: {config.student_model_path}")
                 else:
                     try:
                         student_engine = LLMEngine.from_gguf(
@@ -306,7 +309,7 @@ class BenchmarkRunner:
                             ),
                         )
                     except Exception as e:
-                        print(f"Warning: Failed to load Student model: {str(e)}")
+                        logger.warning(f"Failed to load Student model: {str(e)}")
 
         self.teacher_engine = self.teacher_engine or teacher_engine
         self.student_engine = self.student_engine or student_engine

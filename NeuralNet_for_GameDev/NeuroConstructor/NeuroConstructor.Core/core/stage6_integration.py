@@ -3,12 +3,15 @@ Stage 6: Unified Integration Layer
 Объединяет AI, Forecast, AutoFix и SelfLearning в единый контекст.
 """
 
+import logging
 import time
 from typing import Dict, Any, List, Optional
 from core.ai_plugin import AIPredictionPlugin
 from core.forecast_engine import ForecastEngine
 from core.auto_fix_engine import AutoFixEngine
 from core.self_learning import SelfLearningEngine
+
+logger = logging.getLogger(__name__)
 
 
 class Stage6Integration:
@@ -31,9 +34,7 @@ class Stage6Integration:
         }
         self.metrics_history: List[Dict[str, Any]] = []
         self.optimization_suggestions: List[Dict[str, Any]] = []
-        
-        print("Stage 6 Integration initialized successfully")
-    
+
     def process_ai_prediction(self, metrics: Dict[str, float]) -> Dict[str, Any]:
         """Прогнозирование + самообучение + исправление"""
         # AI прогноз
@@ -110,13 +111,13 @@ class Stage6Integration:
     
     def cleanup(self):
         """Очистка ресурсов"""
-        print("Stage 6 Integration cleaned up")
+        logger.info("Stage 6 Integration cleaned up")
 
 
 if __name__ == "__main__":
     integration = Stage6Integration({})
     result = integration.run_optimization_cycle()
-    print(f"Optimization cycle result: {result}")
+    logger.info(f"Optimization cycle result: {result}")
     status = integration.get_unified_status()
-    print(f"Unified status: {status}")
+    logger.info(f"Unified status: {status}")
     integration.cleanup()

@@ -2,6 +2,8 @@
 
 **Конструктор локальных нейронных сетей** — Teacher/Student pipeline с REST API, React UI и real-time визуализацией рассуждений.
 
+> **Версия:** 2.0 | **Дата:** 27 октября 2026 | **Статус:** Рабочий MVP ~78%
+
 ---
 
 ## 📋 Описание
@@ -14,7 +16,7 @@ NeuroConstructor позволяет создавать и оптимизиров
 
 ### Возможности
 - 🧠 Загрузка Teacher моделей (GGUF, PyTorch, safetensors)
-- 📦 Создание Student моделей с компрессией (arхитектура + квантификация Q4_0-Q8_0)
+- 📦 Создание Student моделей с компрессией (архитектура + квантификация Q4_0-Q8_0)
 - ✅ Валидация качества (6 метрик, cosine similarity, KL-divergence)
 - 📊 Обработка датасетов и анализ активаций
 - ⚡ Квантификация весов (Q4_0, Q5_0, Q6_0, Q8_0)
@@ -22,6 +24,7 @@ NeuroConstructor позволяет создавать и оптимизиров
 - 🤖 Stage 6: AI прогноз, Forecast, AutoFix, SelfLearning
 - 🔍 Скиллы и системные промты
 - 📡 Real-time token-by-token визуализация рассуждений (WebSocket)
+- 🎨 **GGUF Visualizer** — 2D/3D визуализация архитектуры, редактирование слоёв/нейронов
 
 ---
 
@@ -67,7 +70,7 @@ npm run dev
 ```
 NeuroConstructor/
 ├── backend/                    # FastAPI REST API + WebSocket
-│   ├── main.py                 # 38+ API endpoints
+│   ├── main.py                 # 46+ API endpoints (включая 8 Visualizer)
 │   ├── engine_rest.py          # Бизнес-логика REST
 │   └── requirements.txt        # Зависимости Python
 │
@@ -88,6 +91,7 @@ NeuroConstructor/
 │   │       ├── BenchmarkPanel.tsx # Бенчмарки
 │   │       ├── PluginManager.tsx # Управление плагинами
 │   │       ├── PreviewPanel.tsx # Предпросмотр
+│   │       ├── ModelVisualizer.tsx # 2D/3D визуализация GGUF ⭐ NEW
 │   │       ├── NeuralNetVisualizer.tsx # Визуализация нейросетей
 │   │       ├── ArchitectureView.tsx # Просмотр архитектуры
 │   │       ├── DistributionView.tsx # Распределение весов
@@ -117,15 +121,38 @@ NeuroConstructor/
 │   │   ├── stage6_append.py    # Stage 6 extensions
 │   │   ├── test_framework.py   # Testing framework
 │   │   ├── preview_server_manager.py # Preview subprocess
-│   │   └── deepseek_harness_interface.py # DeepSeek Harness
+│   │   ├── deepseek_harness_interface.py # DeepSeek Harness
+│   │   ├── activation_pipeline.py # Activation analysis
+│   │   ├── real_activation_inference.py # Real inference
+│   │   ├── mcp_core.py         # Model Context Protocol
+│   │   ├── mcp_tools.py        # MCP tools
+│   │   └── ...
+│   ├── editor/                 # GGUF Editor (Phase 1) ⭐ NEW
+│   │   ├── __init__.py
+│   │   ├── gguf_io.py          # GGUF reader/writer
+│   │   ├── model_analyzer.py   # Model analysis
+│   │   ├── model_editor.py     # Layer/neuron editing
+│   │   └── model_exporter.py   # Model export
 │   ├── config/                 # Конфигурации (skills, prompts)
 │   └── prompts/                # Системные промты
 │
+├── docs/                       # Документация
+│   ├── dataset_generation_guide.md
+│   └── extensions_developer_guide.md
+├── editor_visualizer/          # GGUF Visualizer документация
+│   ├── README.md
+│   ├── IDEAS_LOG.md
+│   └── IMPLEMENTATION_REPORT.md
+├── journal/                    # Журнал разработки
+│   ├── 1_project_overview.md
+│   ├── 2_topology_activations_journal.md
+│   └── 3_phase2_improvements.md
 ├── DEV_PLAN.md                 # Дорожная карта
 ├── README.md                   # Этот файл
 ├── FINAL_REPORT.md             # Итоговый отчёт
 ├── AUDIT_REPORT.md             # Аудит проекта
-└── FIXES_REPORT.md             # Отчёт об исправлениях
+├── FIXES_REPORT.md             # Отчёт об исправлениях
+└── PROJECT_STATUS_REPORT.md    # Полный отчёт состояния (обновлён 27.10.2026)
 ```
 
 ---
@@ -193,6 +220,18 @@ NeuroConstructor/
 - `GET /api/prompts/list` — Список системных промптов
 - `POST /api/prompts/switch` — Переключение промпта
 - `POST /api/prompts/evaluate` — A/B тестирование промптов
+
+### **Visualizer API** (NEW ⭐)
+- `GET /api/visualizer/analyze/{filename}` — Полный анализ GGUF модели
+- `GET /api/visualizer/info/{filename}` — Информация о модели
+- `GET /api/visualizer/tensors/{filename}` — Информация о тензорах
+- `GET /api/visualizer/stats/{filename}` — Статистика весов
+- `POST /api/visualizer/atlas` — Генерация atlas.json
+- `POST /api/visualizer/edit/remove-layer` — Удаление слоя
+- `POST /api/visualizer/edit/remove-neurons` — Удаление нейронов
+- `POST /api/visualizer/edit/zero-weights` — Обнуление весов
+- `POST /api/visualizer/edit/export` — Экспорт изменённой модели
+- `GET /api/visualizer/edit/operations/{filename}` — Список операций
 
 ---
 

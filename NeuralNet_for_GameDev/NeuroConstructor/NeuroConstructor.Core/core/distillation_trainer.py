@@ -287,7 +287,7 @@ class DistillationTrainer:
                 patience_counter += 1
 
             if patience_counter >= self.config.early_stopping_patience:
-                print(f"Early stopping at epoch {epoch + 1}")
+                logger.info(f"Early stopping at epoch {epoch + 1}")
                 break
 
             # Save checkpoint
@@ -408,7 +408,11 @@ class DistillationTrainer:
         except Exception as e:
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to extract logits, using fallback: {e}")
-            return torch.randn(1, 10)
+            # Better fallback: return zeros instead of random noise
+            # Random noise breaks training, zeros at least don't mislead
+            if TORCH_AVAILABLE:
+                return torch.zeros(1, 10)
+            return torch.tensor([[0.0] * 10])
 
     def _kl_divergence(self, student_logits: Any, teacher_logits: Any, temperature: float = 4.0) -> Any:
         """KL divergence between student and teacher (with temperature scaling)."""

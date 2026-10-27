@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppLayout } from './components/AppLayout';
 import { ChatArea } from './components/ChatArea';
-import { ChatModeSelector } from './components/ChatModeSelector';
 import { ModelsPanel } from './components/ModelsPanel';
 import { DatasetPanel } from './components/DatasetPanel';
 import { BenchmarkPanel } from './components/BenchmarkPanel';
@@ -9,13 +8,14 @@ import { StatusBar } from './components/StatusBar';
 import { PluginManagerPanel } from './components/PluginManager';
 import { SettingsPanel } from './components/SettingsPanel';
 import { PreviewPanel } from './components/PreviewPanel';
-import { checkHealth } from '@/api.client';
+import { PluginPanelRouter } from './components/PluginPanelRouter';
+import { checkHealth, listPlugins } from '@/api.client';
 import { sendChatToMode, exportChatHistory } from '@/api.client';
 import { Plugin } from '@/types';
 import { DatasetAnalysisResult } from '@/types/dataset-panel.types';
 import { ChatMode, ChatMessage } from '@/types';
 
-type Panel = 'chat' | 'models' | 'datasets' | 'benchmark' | 'stage6' | 'plugins' | 'settings';
+type Panel = 'chat' | 'models' | 'datasets' | 'benchmark' | 'stage6' | 'plugins' | 'settings' | 'activations' | string;
 
 interface AppState {
   panel: Panel;
@@ -56,13 +56,39 @@ export default function App() {
   useEffect(() => {
     checkServer();
     loadPlugins();
+    loadSettings();
   }, []);
+
+  const loadSettings = () => {
+    try {
+      const saved = localStorage.getItem('neuroconstructor_settings_v2');
+      if (saved) {
+        const settings = JSON.parse(saved);
+        if (settings.chatMode) {
+          setState(prev => ({ ...prev, chatMode: settings.chatMode }));
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  };
 
   const loadPlugins = useCallback(async () => {
     try {
-      setState((prev) => ({ ...prev, plugins: [] }));
+      const response = await listPlugins();
+      const plugins = (response.plugins || []).map((p: any) => ({
+        id: p.name || p.id,
+        name: p.name,
+        version: p.version || '1.0.0',
+        description: p.description || '',
+        type: p.type || 'default',
+        capabilities: p.capabilities || [],
+        created_at: p.created_at,
+      }));
+      setState((prev) => ({ ...prev, plugins }));
     } catch (error) {
       console.error('Failed to load plugins:', error);
+      setState((prev) => ({ ...prev, plugins: [] }));
     }
   }, []);
 
@@ -89,6 +115,17 @@ export default function App() {
       chatMode: mode,
       messages: [],
     }));
+    // Сохраняем в settings
+    try {
+      const saved = localStorage.getItem('neuroconstructor_settings_v2');
+      if (saved) {
+        const settings = JSON.parse(saved);
+        settings.chatMode = mode;
+        localStorage.setItem('neuroconstructor_settings_v2', JSON.stringify(settings));
+      }
+    } catch {
+      // Ignore
+    }
   }, []);
 
   const handleSendMessage = useCallback(async (text: string) => {
@@ -273,25 +310,17 @@ export default function App() {
           borderRight: state.showPreview ? '1px solid #1a1a2e' : 'none',
         }}>
           {state.panel === 'chat' ? (
-            <>
-              <ChatModeSelector
-                selectedMode={state.chatMode}
-                onChange={handleChatModeChange}
-                isTeacherLoaded={state.isTeacherLoaded}
-                isStudentAvailable={state.isStudentAvailable}
-              />
-              <ChatArea
-                messages={state.messages}
-                inputText={state.inputText}
-                onInputTextChange={(text) => setState((prev) => ({ ...prev, inputText: text }))}
-                onSendMessage={handleSendMessage}
-                onClearChat={handleClearChat}
-                isLoading={state.loading}
-                isServerAvailable={state.isServerAvailable}
-                chatMode={state.chatMode}
-                onExportHistory={handleExportHistory}
-              />
-            </>
+            <ChatArea
+              messages={state.messages}
+              inputText={state.inputText}
+              onInputTextChange={(text) => setState((prev) => ({ ...prev, inputText: text }))}
+              onSendMessage={handleSendMessage}
+              onClearChat={handleClearChat}
+              isLoading={state.loading}
+              isServerAvailable={state.isServerAvailable}
+              chatMode={state.chatMode}
+              onExportHistory={handleExportHistory}
+            />
           ) : state.panel === 'models' ? (
             <ModelsPanel
               isServerAvailable={state.isServerAvailable}
@@ -311,12 +340,10 @@ export default function App() {
           ) : state.panel === 'settings' ? (
             <SettingsPanel />
           ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8888aa' }}>
-              <div style={{ textAlign: 'center' }}>
-                <h2>Panel: {state.panel}</h2>
-                <p style={{ marginTop: 8, fontSize: 14 }}>In development...</p>
-              </div>
-            </div>
+            <>
+              {/* Панели плагинов или заглушки */}
+              <PluginPanelRouter activePanel={state.panel} />
+            </>
           )}
           <StatusBar status={state.serverStatus} isServerAvailable={state.isServerAvailable} />
         </div>

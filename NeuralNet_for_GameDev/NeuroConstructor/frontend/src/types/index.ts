@@ -1,12 +1,53 @@
+export interface PluginCapability {
+  name: string;
+  description?: string;
+}
+
 export interface Plugin {
-  path: string;
+  id: string;
   name: string;
   version: string;
   description: string;
-  type: string;
-  hasUI: boolean;
+  category: string;
   capabilities: string[];
-  lastModified: string;
+  has_ui: boolean;
+  ui_position: string;
+  sidebar_icon: string;
+  sidebar_label: string;
+  is_builtin: boolean;
+  enabled: boolean;
+  state: string;  // 'discovered' | 'loaded' | 'enabled' | 'disabled' | 'error'
+  file_path?: string;
+  file_size?: number;
+  created_at?: string;
+  loaded_at?: string;
+  error_message?: string;
+  dependencies: string[];
+}
+
+export interface PluginSidebarItem {
+  id: string;
+  icon: string;
+  label: string;
+  category: string;
+}
+
+export interface PluginUIPanel {
+  id: string;
+  name: string;
+  has_ui: boolean;
+  category: string;
+}
+
+export interface PluginToggleResult {
+  success: boolean;
+  message: string;
+}
+
+export interface PluginExecuteResult {
+  success: boolean;
+  result?: any;
+  error?: string;
 }
 
 export interface Message {
@@ -140,3 +181,9 @@ export interface TeacherStudentChatResponse {
   teacher_thinking?: string;
   student_thinking?: string;
 }
+
+// ============================================================================
+// Visualizer types (re-exported)
+// ============================================================================
+
+export * from './visualizer.types';

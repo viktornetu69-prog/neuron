@@ -34,8 +34,7 @@ class AIPredictionPlugin:
         
     def train_model(self, training_data: List[Dict]) -> bool:
         """Обучение модели на исторических данных"""
-        # Имитация обучения ML-модели
-        print(f"Training AI model on {len(training_data)} samples...")
+        logger.info(f"Training AI model on {len(training_data)} samples...")
         return True
         
     def get_model_info(self) -> Dict[str, Any]:

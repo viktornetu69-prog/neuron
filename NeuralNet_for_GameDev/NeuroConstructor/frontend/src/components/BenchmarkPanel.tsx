@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { runBenchmark, compareBenchmarkAnswers, checkHealth } from '@/api.client';
 
 interface BenchmarkPanelProps {
   isServerAvailable: boolean;
@@ -44,13 +45,13 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     if (!isServerAvailable) return;
 
     try {
-      const response = await fetch('http://localhost:8000/api/llm/status');
+      const response = await fetch(`${config.teacher_api_url}/api/llm/status`);
       const data = await response.json();
       setLlmStatus(data);
     } catch (err: any) {
       console.error('Failed to load LLM status:', err);
     }
-  }, [isServerAvailable]);
+  }, [isServerAvailable, config.teacher_api_url]);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -62,8 +63,8 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
 
     try {
       const [teacherRes, studentRes] = await Promise.all([
-        fetch('http://localhost:8000/api/models/list?directory=teacher'),
-        fetch('http://localhost:8000/api/models/list?directory=student'),
+        fetch(`${config.teacher_api_url}/api/models/list?directory=teacher`),
+        fetch(`${config.teacher_api_url}/api/models/list?directory=student`),
       ]);
 
       const teacherData = await teacherRes.json();
@@ -80,7 +81,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     } catch (err: any) {
       console.error('Failed to load models:', err);
     }
-  }, [isServerAvailable]);
+  }, [isServerAvailable, config.teacher_api_url]);
 
   // ===== Load model into LLM Engine =====
   const handleLoadModel = useCallback(async (modelType: 'teacher' | 'student') => {
@@ -99,7 +100,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8000/api/llm/load', {
+      const response = await fetch(`${config.teacher_api_url}/api/llm/load`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -126,7 +127,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [isServerAvailable, config.teacher_model, config.student_model]);
+  }, [isServerAvailable, config.teacher_model, config.student_model, config.teacher_api_url]);
 
   // Load models on mount
   React.useEffect(() => {
@@ -156,13 +157,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/benchmark/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      const data = await response.json();
+      const data = await runBenchmark(requestBody);
 
       if (data.status === 'error') {
         setError(data.error_message || 'Ошибка запуска benchmark');
@@ -185,13 +180,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
     if (!compare.teacher || !compare.student) return;
 
     try {
-      const response = await fetch('http://localhost:8000/api/benchmark/compare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(compare),
-      });
-
-      const data = await response.json();
+      const data = await compareBenchmarkAnswers(compare.teacher, compare.student);
       setCompareResult(data);
     } catch (err: any) {
       setError(`Ошибка сравнения: ${err.message}`);
@@ -446,7 +435,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
                 opacity: (!config.teacher_model || loading || !isServerAvailable) ? 0.5 : 1,
               }}
             >
-              {loading ? '⏳ Loading...' : '🔄 Загрузить в LLM Engine'}
+              {loading ? '⏳ Загрузка...' : '🔄 Загрузить в LLM Движок'}
             </button>
 
             <label style={{ ...styles.label, marginTop: 16 }}>Student Model</label>
@@ -473,7 +462,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
                 opacity: (!config.student_model || loading || !isServerAvailable) ? 0.5 : 1,
               }}
             >
-              {loading ? '⏳ Loading...' : '🔄 Загрузить в LLM Engine'}
+              {loading ? '⏳ Загрузка...' : '🔄 Загрузить в LLM Движок'}
             </button>
           </div>
 
@@ -536,7 +525,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
                 ...(loading || !isServerAvailable ? styles.buttonDisabled : {}),
               }}
             >
-              {loading ? '⏳ Running...' : '🚀 Run Benchmark'}
+              {loading ? '⏳ Запуск...' : '🚀 Запустить Тестирование'}
             </button>
 
             {!isServerAvailable && (
@@ -593,7 +582,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
             <div style={styles.empty}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-                <p>Запуск benchmark...</p>
+                <p>Запуск тестирования...</p>
               </div>
             </div>
           )}
@@ -602,26 +591,26 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
             <div>
               {/* Summary card */}
               <div style={styles.section}>
-                <div style={styles.sectionTitle}>📈 Summary</div>
+                <div style={styles.sectionTitle}>📈 Сводка</div>
 
                 <div style={styles.metricRow}>
                   <span style={styles.metricLabel}>Всего тестов</span>
                   <span style={styles.metricValue}>{result.total_tests}</span>
                 </div>
                 <div style={styles.metricRow}>
-                  <span style={styles.metricLabel}>Passed</span>
+                  <span style={styles.metricLabel}>Пройдено</span>
                   <span style={{ ...styles.metricValue, ...styles.passed }}>
                     {result.passed} ({result.pass_rate}%)
                   </span>
                 </div>
                 <div style={styles.metricRow}>
-                  <span style={styles.metricLabel}>Failed</span>
+                  <span style={styles.metricLabel}>Провалено</span>
                   <span style={{ ...styles.metricValue, ...styles.failed }}>
                     {result.failed}
                   </span>
                 </div>
                 <div style={styles.metricRow}>
-                  <span style={styles.metricLabel}>Overall similarity</span>
+                  <span style={styles.metricLabel}>Общая схожесть</span>
                   <span style={{
                     ...styles.metricValue,
                     ...(result.overall_similarity >= 85 ? styles.passed : styles.failed),
@@ -630,12 +619,12 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
                   </span>
                 </div>
                 <div style={styles.metricRow}>
-                  <span style={styles.metricLabel}>Fine-tuning needed</span>
+                  <span style={styles.metricLabel}>Нужен Fine-tuning</span>
                   <span style={{
                     ...styles.metricValue,
                     ...(result.fine_tuning_needed ? styles.failed : styles.passed),
                   }}>
-                    {result.fine_tuning_needed ? 'YES' : 'NO'}
+                    {result.fine_tuning_needed ? 'ДА' : 'НЕТ'}
                   </span>
                 </div>
               </div>
@@ -723,7 +712,7 @@ export const BenchmarkPanel: React.FC<BenchmarkPanelProps> = ({
                 {(() => {
                   const worst = result.report?.worst_cases?.slice(0, 5);
                   if (!worst || worst.length === 0) {
-                    return <p style={{ color: '#666688', fontSize: 13 }}>Все тесты прошли</p>;
+                    return <p style={{ color: '#666688', fontSize: 13 }}>Все тесты пройдены</p>;
                   }
                   return worst.map((case_: any, idx: number) => (
                     <div key={idx} style={styles.worstCase}>
